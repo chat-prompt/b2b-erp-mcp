@@ -382,6 +382,82 @@ server.tool(
 );
 
 server.tool(
+  "import_sessions_from_calendar",
+  "Google Calendar에서 프로젝트명 매칭 이벤트를 찾아서 ERP 세션으로 자동 생성/매칭. 이벤트의 location도 함께 채움. dryRun=true면 미리보기만.",
+  {
+    projectId: z.string().describe("프로젝트 ID"),
+    fuzzyKeywords: z.array(z.string()).optional().describe("프로젝트명 외에 추가로 매칭할 키워드 (예: ['SKT MNO', 'AI Camp 1차수'])"),
+    dryRun: z.boolean().optional().default(false).describe("true면 변경 없이 미리보기만"),
+  },
+  async ({ projectId, fuzzyKeywords = [], dryRun }) => {
+    const project = await erp.getProject(projectId);
+    const projectName = project.projectName;
+    const events = await calendar.searchProjectEvents({
+      projectName,
+      fuzzyKeywords,
+      timeMin: project.educationStartDate ? new Date(new Date(project.educationStartDate).getTime() - 7 * 86400000).toISOString() : undefined,
+      timeMax: project.educationEndDate ? new Date(new Date(project.educationEndDate).getTime() + 7 * 86400000).toISOString() : undefined,
+    });
+
+    if (events.length === 0) {
+      return { content: [{ type: "text", text: `'${projectName}' 매칭 캘린더 이벤트 없음` }] };
+    }
+
+    const existingSessions = await erp.getSessions(projectId);
+    const existingByDate = new Map();
+    for (const s of (Array.isArray(existingSessions) ? existingSessions : [])) {
+      const d = (s.date || "").slice(0, 10);
+      if (d) existingByDate.set(d, s);
+    }
+
+    // 캘린더 이벤트를 날짜별로 정리
+    const eventsByDate = new Map();
+    for (const e of events) {
+      const dateStr = e.start?.date || e.start?.dateTime?.slice(0, 10);
+      if (!dateStr) continue;
+      if (!eventsByDate.has(dateStr)) eventsByDate.set(dateStr, []);
+      eventsByDate.get(dateStr).push(e);
+    }
+
+    const summaryLines = [];
+    const newSessions = [];
+
+    for (const [dateStr, evs] of Array.from(eventsByDate.entries()).sort()) {
+      const ev = evs[0];
+      const startTime = ev.start?.dateTime ? ev.start.dateTime.slice(11, 16) : "09:00";
+      const endTime = ev.end?.dateTime ? ev.end.dateTime.slice(11, 16) : "18:00";
+      const location = ev.location || "";
+      const note = ev.summary || "";
+
+      if (existingByDate.has(dateStr)) {
+        summaryLines.push(`= ${dateStr}: 이미 등록됨 (그대로 유지)`);
+      } else {
+        summaryLines.push(`+ ${dateStr} ${startTime}-${endTime}${location ? ` @ ${location}` : ""}`);
+        if (!dryRun) {
+          newSessions.push({ date: dateStr, startTime, endTime, location, note });
+        }
+      }
+    }
+
+    if (!dryRun && newSessions.length > 0) {
+      await erp.addSessions(projectId, newSessions);
+    }
+
+    return {
+      content: [{
+        type: "text",
+        text: [
+          `'${projectName}' 캘린더 매칭 ${events.length}개 이벤트, 날짜 ${eventsByDate.size}일`,
+          `${dryRun ? "[미리보기]" : "[적용 완료]"} 새로 추가: ${newSessions.length}건`,
+          "",
+          ...summaryLines,
+        ].join("\n"),
+      }],
+    };
+  }
+);
+
+server.tool(
   "list_calendar_events",
   "Google Calendar 다가오는 일정 조회",
   {
