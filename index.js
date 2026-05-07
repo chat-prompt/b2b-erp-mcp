@@ -293,7 +293,7 @@ server.tool(
 
 server.tool(
   "get_sessions",
-  "프로젝트의 교육 세션 목록 조회",
+  "프로젝트의 교육 세션 목록 조회 (각 세션의 강사 배정 포함)",
   {
     projectId: z.string().describe("프로젝트 ID"),
   },
@@ -303,10 +303,81 @@ server.tool(
     if (list.length === 0) {
       return { content: [{ type: "text", text: "등록된 교육 세션 없음" }] };
     }
-    const lines = list.map((s) =>
-      `${s.date?.slice(0, 10)} ${s.startTime}-${s.endTime} ${s.location || ""} ${s.note || ""}`.trim()
-    );
+    const lines = list.map((s) => {
+      const instructorList = (s.instructors || []).map((i) => i.instructorName).join(", ");
+      const parts = [
+        `${s.date?.slice(0, 10)} ${s.startTime}-${s.endTime}`,
+        s.location ? `장소: ${s.location}` : "",
+        instructorList ? `강사: ${instructorList}` : "강사: 미배정",
+        s.note ? `비고: ${s.note}` : "",
+        `id:${s.id}`,
+      ].filter(Boolean);
+      return `· ${parts.join(" | ")}`;
+    });
     return { content: [{ type: "text", text: `교육 세션 ${list.length}건:\n${lines.join("\n")}` }] };
+  }
+);
+
+server.tool(
+  "assign_session_instructors",
+  "교육 세션에 강사를 배정/변경. sessionId 또는 date(YYYY-MM-DD)로 세션을 식별. instructorNames에 본명 또는 닉네임 입력 (예: ['허승연','민수']) — 프로젝트에 등록된 강사 목록에서 자동 매칭. 빈 배열을 보내면 모든 강사 해제.",
+  {
+    projectId: z.string().describe("프로젝트 ID"),
+    sessionId: z.string().optional().describe("세션 ID (있으면 우선)"),
+    date: z.string().optional().describe("세션 날짜 YYYY-MM-DD (sessionId 없을 때 사용)"),
+    instructorNames: z.array(z.string()).optional().describe("강사 본명 또는 닉네임 배열. 닉네임/접미사/부분일치 자동 매칭"),
+    instructorIds: z.array(z.string()).optional().describe("강사 ID 배열 (instructorNames 대신 직접 ID로 지정 가능)"),
+  },
+  async ({ projectId, sessionId, date, instructorNames, instructorIds }) => {
+    const body = {};
+    if (sessionId) body.sessionId = sessionId;
+    if (date) body.date = date;
+    if (Array.isArray(instructorIds)) body.instructorIds = instructorIds;
+    else if (Array.isArray(instructorNames)) body.instructorNames = instructorNames;
+    else {
+      throw new Error("instructorNames 또는 instructorIds 중 하나는 필요합니다");
+    }
+    const updated = await erp.patchSession(projectId, body);
+    const names = (updated.instructors || []).map((i) => i.instructorName).join(", ");
+    const dateStr = updated.date?.slice(0, 10) || "";
+    return {
+      content: [{
+        type: "text",
+        text: `세션 ${dateStr} 강사 배정 완료: ${names || "(없음)"}`,
+      }],
+    };
+  }
+);
+
+server.tool(
+  "update_session",
+  "교육 세션의 시간/장소/비고 수정. sessionId 또는 date로 식별.",
+  {
+    projectId: z.string().describe("프로젝트 ID"),
+    sessionId: z.string().optional().describe("세션 ID"),
+    date: z.string().optional().describe("세션 날짜 YYYY-MM-DD (sessionId 없을 때)"),
+    newDate: z.string().optional().describe("날짜 변경 (sessionId 사용 시)"),
+    startTime: z.string().optional().describe("시작 시간 HH:MM"),
+    endTime: z.string().optional().describe("종료 시간 HH:MM"),
+    location: z.string().optional().describe("장소"),
+    note: z.string().optional().describe("비고"),
+  },
+  async ({ projectId, sessionId, date, newDate, startTime, endTime, location, note }) => {
+    const body = {};
+    if (sessionId) body.sessionId = sessionId;
+    if (date) body.date = date;
+    if (newDate && sessionId) body.date = newDate; // sessionId가 있으면 date는 변경값으로
+    if (startTime !== undefined) body.startTime = startTime;
+    if (endTime !== undefined) body.endTime = endTime;
+    if (location !== undefined) body.location = location;
+    if (note !== undefined) body.note = note;
+    const updated = await erp.patchSession(projectId, body);
+    return {
+      content: [{
+        type: "text",
+        text: `세션 수정 완료: ${updated.date?.slice(0, 10)} ${updated.startTime}-${updated.endTime}${updated.location ? ` @ ${updated.location}` : ""}`,
+      }],
+    };
   }
 );
 
