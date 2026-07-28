@@ -270,7 +270,7 @@
   <tr>
     <td><span class="tag read">read</span></td>
     <td>get_notes, get_account, list_invoices(세금계산서), list_disbursements(강사료 지급 현황), list_vouchers(상품권), get_activity(활동 이력)</td>
-    <td>API는 있고 <strong>도구 없음</strong></td>
+    <td>7월 28일 추가 완료</td>
   </tr>
   <tr>
     <td><span class="tag write">write</span></td>
@@ -291,24 +291,45 @@
 </div>
 
 <div class="card">
-  <h3>결정이 필요한 두 가지</h3>
-  <ol>
-    <li><strong>강사 연락처를 조회 등급에 포함할지.</strong> <code>get_instructor</code>는 강사 휴대폰과 이메일을 반환합니다. 계좌번호와 주민번호는 API 자체가 반환하지 않으니 안전하지만, 강사 개인 연락처를 팀원 전원이 보게 할지는 판단이 필요합니다.</li>
-    <li><strong>강사료 금액을 조회 등급에 포함할지.</strong> <code>get_project</code> 응답에 강사별 강사료가 들어 있습니다. 지금은 조회만 해도 다 보입니다. 가려야 한다면 응답에서 빼는 작업이 따로 필요합니다.</li>
-  </ol>
+  <h3>결정됨 (2026-07-28, 가경님)</h3>
+  <p><strong>B2B 인원으로 등록된 팀원은 강사 전화번호와 강사료 금액을 봐도 됩니다.</strong> 조회 등급에 그대로 포함합니다. 응답에서 가리는 작업이 필요 없어졌고, <code>get_instructor</code>·<code>get_project</code>·<code>list_disbursements</code>를 조회 등급에 넣습니다.</p>
+  <p class="small muted">단, 계좌번호와 주민번호는 external API 자체가 반환하지 않으므로 등급과 무관하게 계속 막혀 있습니다. 이 두 항목은 ERP 웹에서만 다룹니다.</p>
 </div>
 
 <h2>5. 팀원이 겪는 흐름</h2>
-<p>원격 방식으로 갔을 때 팀원이 하는 일은 이게 전부입니다.</p>
+<p>팀원이 하는 일은 세 단계입니다. 어느 방식으로 가도 이 흐름은 같습니다.</p>
 <ol>
-  <li>ERP에 로그인해서 설정 &gt; API 키에서 키를 발급받습니다. 등급은 조회 전용이 기본값입니다.</li>
-  <li>화면에 나온 연결 명령을 복사해서 자기 터미널에 한 번 붙입니다.</li>
+  <li>ERP에 로그인해서 설정 &gt; API 키에서 키를 발급받습니다.</li>
+  <li>화면에 나온 명령을 복사해서 자기 터미널에 한 번 붙입니다.</li>
   <li>클로드에 "충북대 교육 언제 어디서 하냐"고 물으면 답이 나옵니다.</li>
 </ol>
-<pre><code>claude mcp add --transport http b2b-erp \
+
+<h3>한 줄 설치는 지금도 됩니다</h3>
+<p>확인해 보니 <code>claude mcp add</code>가 두 방식 모두 한 줄을 지원합니다. 지금 이 순간 팀원에게 뿌릴 수 있는 명령이 이겁니다.</p>
+<pre><code>claude mcp add -s user b2b-erp -e B2B_ERP_API_KEY=발급받은키 \
+  -- npx -y github:chat-prompt/b2b-erp-mcp</code></pre>
+<p>원격 방식으로 옮기면 이렇게 짧아지고, 팀원 노트북에 노드나 프로그램이 필요 없어집니다.</p>
+<pre><code>claude mcp add -s user --transport http b2b-erp \
   https://b2b-sales-three.vercel.app/api/mcp \
-  --header "x-api-key: 발급받은키"</code></pre>
-<p class="small muted">이 명령을 사람이 손으로 만들게 하면 반드시 사고가 납니다. 발급 화면에서 키가 채워진 상태로 복사되게 만드는 것이 온보딩의 핵심입니다.</p>
+  -H "x-api-key: 발급받은키"</code></pre>
+
+<div class="card">
+  <h3>그래서 진짜 병목은 한 줄 명령이 아닙니다</h3>
+  <p>설치 명령은 이미 한 줄입니다. 남은 문제는 두 개뿐입니다.</p>
+  <ol>
+    <li><strong>지금 뿌리면 전권 키를 뿌리는 겁니다.</strong> 조회만 하라고 줘도 삭제까지 됩니다.</li>
+    <li><strong>도구를 고칠 때마다 팀원이 각자 업데이트해야 합니다.</strong> 오늘 저한테 도구가 안 보였던 것과 같은 사고가 사람 수만큼 납니다.</li>
+  </ol>
+  <p>둘 다 원격으로 옮기면 사라집니다. 그래서 순서는 <strong>권한 게이트 먼저, 원격 다음, 그 뒤에 팀 전체 배포</strong>입니다.</p>
+</div>
+
+<h3>슬랙봇으로 할 경우</h3>
+<p>비투비서 봇이 이미 ERP를 읽고 있지만, 그건 가경님 맥북에서 돌고 교육 채널에서 가경님만 씁니다. 팀원용으로 열려면 두 가지가 더 필요합니다.</p>
+<ul>
+  <li><strong>상시 가동 서버.</strong> 맥북이 꺼지면 봇도 멈춥니다. 팀 도구가 되려면 서버로 올라가야 합니다.</li>
+  <li><strong>슬랙 사용자와 ERP 권한 연결.</strong> 채널에서 누가 물었는지에 따라 조회만 되게 할지 수정까지 되게 할지 갈라야 합니다. 지금은 봇 하나가 전권으로 붙어 있어서 누가 물어도 같은 권한입니다.</li>
+</ul>
+<p>둘 다 클로드 한 줄 설치보다 일이 많습니다. 다만 원격 엔드포인트가 생기면 봇도 그걸 호출하면 되니 작업이 겹치지 않습니다. <strong>클로드 CLI 먼저, 슬랙봇은 그 다음</strong>을 권합니다. 팀원이 클로드 코드를 이미 쓰고 있다면 체감 편의는 클로드 쪽이 더 큽니다.</p>
 
 <h2>6. 실행 순서</h2>
 
@@ -316,8 +337,8 @@
 <table>
   <tr><th>단계</th><th>할 일</th><th>고치는 곳</th><th>리뷰</th></tr>
   <tr>
-    <td class="num"><span class="tag now">0단계</span><br><span class="muted small">지금 바로</span></td>
-    <td>캘린더 게이트 밖으로 세션·매출·비용 도구 7개를 이동. 커밋 안 된 188줄 정리해서 커밋 후 push</td>
+    <td class="num"><span class="tag now">0단계 완료</span><br><span class="muted small">2026-07-28</span></td>
+    <td>캘린더 게이트를 캘린더 전용 4개 도구로 축소. 세션·매출·비용 도구 7개를 게이트 밖으로 이동. 조회 도구 7개 신규 추가. 미push 상태였던 create_project·create_account 포함해 커밋 후 push (f45e070). 캘린더 없는 환경에서 도구 24개 등록 확인, 신규 도구 7개 실호출 검증 완료</td>
     <td>b2b-erp-mcp<br><span class="muted small">내 리포</span></td>
     <td>불필요</td>
   </tr>
