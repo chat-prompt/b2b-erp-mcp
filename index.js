@@ -14,6 +14,16 @@ if (!API_KEY) {
 }
 erp.setApiKey(API_KEY);
 
+// ── ERP enum 값 (b2b-sales/src/lib/constants.ts 와 동기화) ──
+// 드롭다운 고정값. 자유입력 금지 — z.enum으로 잠가 무효값을 거부하고 유효값을 스키마에 노출한다.
+const SEGMENTS = ["대기업", "중견기업", "중소기업", "스타트업", "공공기관", "교육기관", "비영리단체", "기타"];
+const INDUSTRIES = ["IT/소프트웨어", "통신", "금융/보험", "제조", "건설/엔지니어링", "에너지/화학", "유통/물류", "의료/제약", "미디어/엔터테인먼트", "교육", "컨설팅/전문서비스", "소비재", "자동차/운송", "부동산", "공공/정부", "기타"];
+const LEAD_SOURCES = ["인바운드", "아웃바운드", "소개/추천", "기존고객", "웹사이트", "세미나", "기타"];
+const PROJECT_TYPES = ["교육과정", "컨설팅", "기타"];
+const DELIVERY_FORMATS = ["online", "offline", "hybrid"];
+const STAGES = ["lead", "meeting_done", "proposal_sent", "negotiating", "won", "preparing", "in_progress", "completed", "lost"];
+const ACCOUNT_GROUPS = ["SK", "기타"];
+
 // ── Server ───────────────────────────────────────────
 const server = new McpServer({
   name: "b2b-erp",
@@ -96,7 +106,7 @@ server.tool(
   "ERP 프로젝트 정보 수정 (단계, 일정, 매출 등)",
   {
     id: z.string().describe("프로젝트 ID"),
-    stage: z.string().optional().describe("단계 변경"),
+    stage: z.enum(STAGES).optional().describe("단계 변경"),
     ownerName: z.string().optional().describe("담당자 변경"),
     educationStartDate: z.string().optional().describe("교육 시작일 (YYYY-MM-DD)"),
     educationEndDate: z.string().optional().describe("교육 종료일 (YYYY-MM-DD)"),
@@ -113,6 +123,52 @@ server.tool(
     const data = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
     const result = await erp.updateProject(id, data);
     return { content: [{ type: "text", text: `프로젝트 수정 완료: ${result.projectName || id}` }] };
+  }
+);
+
+server.tool(
+  "create_project",
+  "ERP 신규 프로젝트 생성 (인바운드 문의 등록). projectName, accountId, ownerName 필수. accountId가 없으면 먼저 create_account로 거래처를 만든다.",
+  {
+    projectName: z.string().describe("프로젝트명 (예: 금융결제원 AI 업무자동화 교육)"),
+    accountId: z.string().describe("거래처 ID (list_accounts/create_account에서 확보)"),
+    ownerName: z.string().describe("담당자명 (예: 한가경)"),
+    stage: z.enum(STAGES).optional().describe("단계 (기본 lead)"),
+    leadSource: z.enum(LEAD_SOURCES).optional().describe("리드 출처 (인바운드 폼은 '인바운드')"),
+    projectType: z.enum(PROJECT_TYPES).optional().describe("프로젝트 유형 (교육은 '교육과정')"),
+    deliveryFormat: z.enum(DELIVERY_FORMATS).optional().describe("진행 형태 (오프라인은 'offline')"),
+    expectedParticipants: z.number().optional().describe("예상 참여인원"),
+    expectedRevenueAmount: z.number().optional().describe("예상 매출 (원)"),
+    probability: z.number().optional().describe("성공 확률 (%)"),
+    educationStartDate: z.string().optional().describe("교육 시작일 (YYYY-MM-DD)"),
+    educationEndDate: z.string().optional().describe("교육 종료일 (YYYY-MM-DD)"),
+    mainNeeds: z.string().optional().describe("주요 니즈"),
+    description: z.string().optional().describe("설명/메모"),
+  },
+  async (fields) => {
+    const data = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
+    const result = await erp.createProject(data);
+    const p = result.project || result;
+    return { content: [{ type: "text", text: `프로젝트 생성 완료: ${p.projectName} (${p.projectCode || ""})\nID: ${p.id}\nhttps://b2b-sales-three.vercel.app/projects/${p.id}` }] };
+  }
+);
+
+server.tool(
+  "create_account",
+  "ERP 신규 거래처(고객사) 생성. companyName 필수. 생성 후 반환 id를 create_project의 accountId로 쓴다.",
+  {
+    companyName: z.string().describe("기업명 (예: 금융결제원)"),
+    industry: z.enum(INDUSTRIES).optional().describe("산업군 (금융기관은 '금융/보험')"),
+    segment: z.enum(SEGMENTS).optional().describe("세그먼트 (공공·금융 인프라는 '공공기관')"),
+    accountGroup: z.enum(ACCOUNT_GROUPS).optional().describe("그룹"),
+    defaultContactName: z.string().optional().describe("담당자명"),
+    defaultContactEmail: z.string().optional().describe("담당자 이메일"),
+    defaultContactPhone: z.string().optional().describe("담당자 연락처"),
+  },
+  async (fields) => {
+    const data = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
+    const a = await erp.createAccount(data);
+    return { content: [{ type: "text", text: `거래처 생성 완료: ${a.companyName || data.companyName}\nID: ${a.id}` }] };
   }
 );
 
@@ -189,9 +245,13 @@ server.tool(
   {
     projectId: z.string().describe("프로젝트 ID"),
     content: z.string().describe("메모 내용"),
+    occurredAt: z
+      .string()
+      .optional()
+      .describe("실제로 그 일이 있었던 날 (YYYY-MM-DD). 지난 일을 나중에 적을 때 넣는다. 비우면 오늘로 기록"),
   },
-  async ({ projectId, content }) => {
-    await erp.addNote(projectId, content);
+  async ({ projectId, content, occurredAt }) => {
+    await erp.addNote(projectId, content, occurredAt);
     return { content: [{ type: "text", text: "메모 추가 완료" }] };
   }
 );
@@ -205,13 +265,220 @@ server.tool(
   async ({ search }) => {
     const instructors = await erp.listInstructors({ search });
     const lines = (Array.isArray(instructors) ? instructors : []).map((i) =>
-      `${i.instructorName} (${i.nickname || "-"}) | ${i.affiliation || "-"} | ${i.expertiseArea || "-"} | id:${i.id}`
+      `${i.instructorName} (${i.nickname || "-"}) | ${i.affiliation || "-"} | ${i.expertiseArea || "-"} | ${i.phone || "연락처 없음"} | id:${i.id}`
     );
     return { content: [{ type: "text", text: `총 ${(Array.isArray(instructors) ? instructors : []).length}건\n\n${lines.join("\n")}` }] };
   }
 );
 
-// ── Calendar Tools (OAuth 설정된 경우에만 등록) ──────────
+server.tool(
+  "get_instructor",
+  "ERP 강사 상세 조회 (연락처, 소속, 배정 프로젝트 포함). 계좌·주민번호는 반환되지 않는다.",
+  {
+    id: z.string().describe("강사 ID (UUID). list_instructors에서 확보"),
+  },
+  async ({ id }) => {
+    const i = await erp.getInstructor(id);
+    const projects = (i.projectInstructors || []).map((pi) =>
+      `  - ${pi.project?.projectName || "?"} (${pi.project?.stage || "-"}) | ${Number(pi.totalFee || 0).toLocaleString()}원 | ${pi.paymentStatus}`
+    ).join("\n");
+
+    const text = `# ${i.instructorName}${i.nickname ? ` (${i.nickname})` : ""}
+연락처: ${i.phone || "없음"}
+이메일: ${i.email || "없음"}
+소속: ${i.affiliation || "없음"}
+전문분야: ${i.expertiseArea || "없음"}
+상태: ${i.status || "-"}
+메모: ${i.memo || "없음"}
+
+## 배정 프로젝트
+${projects || "  없음"}`;
+
+    return { content: [{ type: "text", text }] };
+  }
+);
+
+server.tool(
+  "update_instructor",
+  "ERP 강사 정보 수정 (연락처·이메일·소속·메모 등). 계좌번호·주민번호 등 민감 정보는 외부 API에서 수정 불가하므로 이 도구로도 다룰 수 없다. 강사료·세금유형 등 정산 필드도 실수 방지를 위해 제외했다 — 필요하면 ERP 웹에서 수정할 것.",
+  {
+    id: z.string().describe("강사 ID (UUID). list_instructors에서 확보"),
+    instructorName: z.string().optional().describe("강사 본명"),
+    nickname: z.string().optional().describe("닉네임"),
+    phone: z.string().optional().describe("연락처 (예: 010-1234-5678)"),
+    email: z.string().optional().describe("이메일"),
+    affiliation: z.string().optional().describe("소속"),
+    expertiseArea: z.string().optional().describe("전문분야"),
+    memo: z.string().optional().describe("메모 (차량번호 등 전용 필드가 없는 정보는 여기에)"),
+  },
+  async ({ id, ...fields }) => {
+    const data = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
+    if (Object.keys(data).length === 0) {
+      throw new Error("수정할 필드를 하나 이상 지정하세요");
+    }
+    const updated = await erp.updateInstructor(id, data);
+    const changed = Object.keys(data).join(", ");
+    return { content: [{ type: "text", text: `강사 수정 완료: ${updated.instructorName || id}\n변경 필드: ${changed}` }] };
+  }
+);
+
+// ── 조회 전용 도구 (read) ────────────────────────────
+
+server.tool(
+  "get_notes",
+  "프로젝트 메모 전체 조회. get_project는 최근 5건만 보여주므로 이력을 다 보려면 이 도구를 쓴다.",
+  {
+    projectId: z.string().describe("프로젝트 ID"),
+    limit: z.number().optional().default(30).describe("최대 건수 (최신순)"),
+  },
+  async ({ projectId, limit }) => {
+    const res = await erp.getNotes(projectId);
+    const notes = res.notes || (Array.isArray(res) ? res : []);
+    if (notes.length === 0) {
+      return { content: [{ type: "text", text: "메모 없음" }] };
+    }
+    const lines = notes.slice(0, limit).map((n) => {
+      const when = (n.occurredAt || n.createdAt || "").slice(0, 10);
+      const who = n.author?.name || n.author || "";
+      return `[${when}]${who ? ` ${who}` : ""}\n${n.content}`;
+    });
+    return { content: [{ type: "text", text: `메모 ${notes.length}건 (표시 ${Math.min(notes.length, limit)}건)\n\n${lines.join("\n\n")}` }] };
+  }
+);
+
+server.tool(
+  "get_account",
+  "거래처(고객사) 상세 조회. 사업자번호·주소·세금계산서 이메일·담당자 연락처 포함.",
+  {
+    id: z.string().describe("거래처 ID. list_accounts에서 확보"),
+  },
+  async ({ id }) => {
+    const a = await erp.getAccount(id);
+    const text = `# ${a.companyName}
+사업자번호: ${a.businessNumber || "없음"}
+산업군: ${a.industry || "미지정"} | 세그먼트: ${a.segment || "미지정"} | 그룹: ${a.accountGroup || "미지정"}
+담당자: ${a.defaultContactName || "없음"} / ${a.defaultContactEmail || "이메일 없음"} / ${a.defaultContactPhone || "연락처 없음"}
+세금계산서 이메일: ${a.invoiceEmail || "없음"}
+주소: ${a.address || "없음"}
+메모: ${a.memo || "없음"}
+프로젝트 수: ${a._count?.projects ?? (Array.isArray(a.projects) ? a.projects.length : "확인 불가")}`;
+    return { content: [{ type: "text", text }] };
+  }
+);
+
+server.tool(
+  "list_invoices",
+  "세금계산서 발행·수금 현황 조회. 월 지정 시 그 달 발행/청구 건. 미수금 확인용.",
+  {
+    month: z.string().optional().describe("조회 월 (YYYY-MM). 미지정 시 전체"),
+    status: z.string().optional().describe("수금 상태 필터 (예: not_billed / billed / paid)"),
+  },
+  async ({ month, status }) => {
+    const invoices = await erp.listInvoices({ month, status });
+    if (invoices.length === 0) {
+      return { content: [{ type: "text", text: "해당 조건의 세금계산서 없음" }] };
+    }
+    let total = 0;
+    let paid = 0;
+    const lines = invoices.map((v) => {
+      const amount = Number(v.invoiceAmount || 0);
+      const paidAmount = Number(v.paidAmount || 0);
+      total += amount;
+      paid += paidAmount;
+      const name = v.groupName || v.companyName || "이름 없음";
+      const issue = (v.invoiceIssueDate || "").slice(0, 10);
+      const due = (v.expectedPaymentDate || "").slice(0, 10);
+      return `· ${name} | ${amount.toLocaleString()}원 | ${v.paymentStatus} | ${issue ? `발행 ${issue}` : "미발행"}${due ? ` | 입금예정 ${due}` : ""}`;
+    });
+    const outstanding = total - paid;
+    return {
+      content: [{
+        type: "text",
+        text: `세금계산서 ${invoices.length}건${month ? ` (${month})` : ""}\n합계 ${total.toLocaleString()}원 | 입금 ${paid.toLocaleString()}원 | 미수 ${outstanding.toLocaleString()}원\n\n${lines.join("\n")}`,
+      }],
+    };
+  }
+);
+
+server.tool(
+  "list_disbursements",
+  "월별 강사료 지급 현황 조회 (지급 예정일 기준, 없으면 교육일 기준). 지급 상태별 합계 포함.",
+  {
+    month: z.string().describe("조회 월 (YYYY-MM). 필수"),
+  },
+  async ({ month }) => {
+    const { items, summary } = await erp.listDisbursements(month);
+    if (items.length === 0) {
+      return { content: [{ type: "text", text: `${month} 강사료 지급 대상 없음` }] };
+    }
+    const lines = items.map((i) => {
+      const who = i.instructor?.instructorName || i.instructor?.nickname || "?";
+      const proj = i.project?.projectName || "?";
+      return `· ${who} | ${proj} | ${Number(i.totalFee || 0).toLocaleString()}원 | ${i.roleType || "-"} | ${i.paymentStatus}`;
+    });
+    const byStatus = Object.entries(summary?.byStatus || {})
+      .map(([k, v]) => `  ${k}: ${Number(v.fee || 0).toLocaleString()}원 (${v.count}건)`)
+      .join("\n");
+    const head = summary
+      ? `공급가 ${Number(summary.totalSupply || 0).toLocaleString()}원 | 부가세 ${Number(summary.totalVat || 0).toLocaleString()}원 | 지급총액 ${Number(summary.totalPayment || 0).toLocaleString()}원`
+      : "";
+    return {
+      content: [{
+        type: "text",
+        text: `${month} 강사료 ${items.length}건\n${head}\n\n## 상태별\n${byStatus || "  없음"}\n\n## 상세\n${lines.join("\n")}`,
+      }],
+    };
+  }
+);
+
+server.tool(
+  "list_vouchers",
+  "상품권 발송 배치 조회. 기본은 작성중(draft)·승인(approved) 상태.",
+  {
+    status: z.string().optional().describe("상태 필터 쉼표 구분 (draft,checking,ready,approved,sending,sent,failed)"),
+  },
+  async ({ status }) => {
+    const batches = await erp.listVouchers({ status });
+    if (batches.length === 0) {
+      return { content: [{ type: "text", text: "해당 상태의 상품권 배치 없음" }] };
+    }
+    const lines = batches.map((b) => {
+      const name = b.batchName || b.name || b.title || b.id;
+      const when = (b.createdAt || "").slice(0, 10);
+      return `· ${name} | ${b.status} | 생성 ${when} | id:${b.id}`;
+    });
+    return { content: [{ type: "text", text: `상품권 배치 ${batches.length}건\n${lines.join("\n")}` }] };
+  }
+);
+
+server.tool(
+  "get_activity",
+  "ERP 활동 이력(감사 로그) 조회. 누가 언제 무엇을 바꿨는지. 프로젝트별·기간별 필터 가능.",
+  {
+    limit: z.number().optional().default(20).describe("최대 건수 (최대 50)"),
+    projectId: z.string().optional().describe("특정 프로젝트만"),
+    entityType: z.string().optional().describe("대상 종류 필터 (예: Project, EducationSession, PersonalApiKey)"),
+    dateFrom: z.string().optional().describe("시작일 (YYYY-MM-DD)"),
+    dateTo: z.string().optional().describe("종료일 (YYYY-MM-DD)"),
+  },
+  async ({ limit, projectId, entityType, dateFrom, dateTo }) => {
+    const logs = await erp.getActivity({ limit, projectId, entityType, dateFrom, dateTo });
+    if (logs.length === 0) {
+      return { content: [{ type: "text", text: "해당 조건의 활동 이력 없음" }] };
+    }
+    const lines = logs.map((l) => {
+      const when = (l.createdAt || "").slice(0, 16).replace("T", " ");
+      const target = l.entityName || l.projectName || l.entityId || "";
+      return `· ${when} | ${l.actorName || "?"} | ${l.action} ${l.entityType}${target ? ` (${target})` : ""}`;
+    });
+    return { content: [{ type: "text", text: `활동 이력 ${logs.length}건\n${lines.join("\n")}` }] };
+  }
+);
+
+// ── Calendar Sync Tools (Google OAuth 필요) ─────────────
+// 이 게이트 안에는 구글 캘린더 자체가 필요한 도구만 둔다.
+// 세션·매출·비용 등 ERP 데이터 도구는 캘린더와 무관하므로 게이트 밖에 있어야 한다.
+// (과거에 이 블록이 너무 넓어서 OAuth 미설정 환경에서 세션 도구가 통째로 사라졌다)
 if (calendar.isCalendarConfigured()) {
 
 server.tool(
@@ -271,6 +538,10 @@ server.tool(
   }
 );
 
+} // end calendar sync tools
+
+// ── Education Session / 매출·비용 Tools (캘린더 무관, 항상 등록) ──
+
 server.tool(
   "add_sessions",
   "프로젝트에 교육 세션(날짜/시간) 등록. 캘린더 동기화 전에 먼저 세션을 등록해야 함.",
@@ -288,6 +559,56 @@ server.tool(
     const created = await erp.addSessions(projectId, sessions);
     const count = Array.isArray(created) ? created.length : 1;
     return { content: [{ type: "text", text: `교육 세션 ${count}건 등록 완료` }] };
+  }
+);
+
+server.tool(
+  "delete_sessions",
+  "프로젝트의 교육 세션 삭제. sessionIds로 특정 세션들만, 또는 deleteAll:true로 전체 삭제.",
+  {
+    projectId: z.string().describe("프로젝트 ID"),
+    sessionIds: z.array(z.string()).optional().describe("삭제할 세션 ID 배열"),
+    deleteAll: z.boolean().optional().describe("true면 해당 프로젝트 전체 세션 삭제"),
+  },
+  async ({ projectId, sessionIds, deleteAll }) => {
+    if (!deleteAll && (!sessionIds || sessionIds.length === 0)) {
+      throw new Error("sessionIds 또는 deleteAll 중 하나는 필요합니다");
+    }
+    await erp.deleteSessions(projectId, { sessionIds, deleteAll });
+    return { content: [{ type: "text", text: deleteAll ? "전체 세션 삭제 완료" : `세션 ${sessionIds.length}건 삭제 완료` }] };
+  }
+);
+
+server.tool(
+  "add_revenue_item",
+  "프로젝트에 매출 항목 추가. 금액은 원 단위 숫자.",
+  {
+    projectId: z.string().describe("프로젝트 ID"),
+    revenueName: z.string().describe("매출 항목명 (예: '1차수 교육비')"),
+    amount: z.number().describe("금액 (원)"),
+    taxType: z.string().optional().describe("세금유형: 세금계산서 / 원천징수 / 면세 (미지정 가능)"),
+  },
+  async ({ projectId, revenueName, amount, taxType }) => {
+    await erp.addRevenueItem(projectId, { revenueName, amount, taxType });
+    return { content: [{ type: "text", text: `매출 항목 추가 완료: ${revenueName} ${amount.toLocaleString()}원` }] };
+  }
+);
+
+server.tool(
+  "add_cost_item",
+  "프로젝트에 기타비용 항목 추가(강사료 제외). 금액은 원 단위 숫자.",
+  {
+    projectId: z.string().describe("프로젝트 ID"),
+    costName: z.string().describe("비용명 (예: '교재 인쇄')"),
+    amount: z.number().describe("금액 (원)"),
+    costType: z.string().optional().describe("비용 유형 (미지정 시 '기타')"),
+    vendorName: z.string().optional().describe("거래처/업체명"),
+    note: z.string().optional().describe("비고"),
+    expectedPaymentDate: z.string().optional().describe("지급 예정일 (YYYY-MM-DD)"),
+  },
+  async ({ projectId, costName, amount, costType, vendorName, note, expectedPaymentDate }) => {
+    await erp.addCostItem(projectId, { costName, amount, costType, vendorName, note, expectedPaymentDate });
+    return { content: [{ type: "text", text: `기타비용 항목 추가 완료: ${costName} ${amount.toLocaleString()}원` }] };
   }
 );
 
@@ -380,6 +701,9 @@ server.tool(
     };
   }
 );
+
+// ── Calendar Import/Read Tools (Google OAuth 필요) ──────
+if (calendar.isCalendarConfigured()) {
 
 server.tool(
   "import_sessions_from_calendar",
