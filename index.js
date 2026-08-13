@@ -117,6 +117,8 @@ server.tool(
     description: z.string().optional().describe("설명"),
     nextStep: z.string().optional().describe("다음 단계"),
     lossReason: z.string().optional().describe("실주 사유"),
+    studentPageUrl: z.string().optional().describe("수강생 공유 페이지 URL (수강생이 보는 교안·학습자료·강의 페이지. 접근 코드 포함 전체 URL)"),
+    instructorPageUrl: z.string().optional().describe("강사·운영진 공유 페이지 URL (운영관리 시트·마스터 페이지·출결/일정 관리. 수강생용과 혼동 금지)"),
   },
   async ({ id, ...fields }) => {
     // Remove undefined fields
