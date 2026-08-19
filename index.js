@@ -68,6 +68,9 @@ server.tool(
     const instructors = (p.instructors || p.projectInstructors || []).map((i) =>
       `  - ${i.instructor?.instructorName || i.instructorName || "?"}: ${Number(i.totalFee || 0).toLocaleString()}원 (${i.paymentStatus})`
     ).join("\n");
+    const quotations = (p.quotations || []).map((q) =>
+      `  - ${q.isFinal ? "[최종] " : ""}${q.title}: ${Number(q.supplyAmount || 0).toLocaleString()}원${q.sheetUrl ? ` (${q.sheetUrl})` : ""}`
+    ).join("\n");
     const notes = (p.notes || []).slice(0, 5).map((n) =>
       `  - [${n.createdAt?.slice(0, 10)}] ${n.content?.slice(0, 100)}`
     ).join("\n");
@@ -82,6 +85,9 @@ server.tool(
 세그먼트: ${p.segment || "미지정"} | 그룹: ${p.accountGroup || "미지정"}
 리드소스: ${p.leadSource || "미지정"}
 주요니즈: ${p.mainNeeds || "없음"}
+
+## 견적서
+${quotations || "  없음"}
 
 ## 매출 항목
 ${revenue || "  없음"}
@@ -593,6 +599,91 @@ server.tool(
   async ({ projectId, revenueName, amount, taxType }) => {
     await erp.addRevenueItem(projectId, { revenueName, amount, taxType });
     return { content: [{ type: "text", text: `매출 항목 추가 완료: ${revenueName} ${amount.toLocaleString()}원` }] };
+  }
+);
+
+// ── Quotations (견적서) ───────────────────────────────
+// 견적서 실물은 구글시트/문서로 만들고, 여기엔 그 링크(sheetUrl)와 공급가만 프로젝트에 묶어 추적한다.
+
+server.tool(
+  "list_quotations",
+  "프로젝트의 견적서 목록 조회. 견적명·공급가·견적일·최종본 여부·시트/문서 링크(sheetUrl)·수신처 포함.",
+  {
+    projectId: z.string().describe("프로젝트 ID"),
+  },
+  async ({ projectId }) => {
+    const items = await erp.listQuotations(projectId);
+    if (items.length === 0) {
+      return { content: [{ type: "text", text: "등록된 견적서 없음" }] };
+    }
+    const lines = items.map((q) => {
+      const date = (q.quoteDate || "").slice(0, 10);
+      const amt = Number(q.supplyAmount || 0).toLocaleString();
+      const flag = q.isFinal ? "[최종]" : "[이전]";
+      return `· ${flag} ${q.title} | 공급가 ${amt}원${date ? ` | ${date}` : ""}${q.recipient ? ` | 수신 ${q.recipient}` : ""}${q.sheetUrl ? ` | ${q.sheetUrl}` : ""} | id:${q.id}`;
+    });
+    return { content: [{ type: "text", text: `견적서 ${items.length}건\n${lines.join("\n")}` }] };
+  }
+);
+
+server.tool(
+  "add_quotation",
+  "프로젝트에 견적서를 추가. 견적서 실물은 구글시트/문서로 만들고 그 링크(sheetUrl)와 공급가만 등록한다. supplyAmount는 부가세 별도 공급가(원 단위 숫자).",
+  {
+    projectId: z.string().describe("프로젝트 ID"),
+    title: z.string().describe("견적명 (예: 'AI 기반 HR Data 자동화 실무 (2차수)')"),
+    supplyAmount: z.number().describe("공급가 (부가세 별도, 원 단위 숫자)"),
+    quoteDate: z.string().optional().describe("견적일 (YYYY-MM-DD)"),
+    validUntil: z.string().optional().describe("유효기간 (YYYY-MM-DD)"),
+    isFinal: z.boolean().optional().default(true).describe("최종본 여부 (기본 true). 여러 차수가 각각 최종본일 수 있음"),
+    sheetUrl: z.string().optional().describe("견적서 구글시트/문서/PDF 링크"),
+    recipient: z.string().optional().describe("수신처 (고객사와 다를 때, 예: 'SK엠앤서비스')"),
+    note: z.string().optional().describe("비고"),
+  },
+  async ({ projectId, ...fields }) => {
+    const data = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
+    const res = await erp.addQuotation(projectId, data);
+    const q = res.quotation || res;
+    return { content: [{ type: "text", text: `견적서 추가 완료: ${q.title} 공급가 ${Number(q.supplyAmount || 0).toLocaleString()}원\nid:${q.id}` }] };
+  }
+);
+
+server.tool(
+  "update_quotation",
+  "견적서 수정. itemId로 대상 지정 (list_quotations에서 확보). 지정한 필드만 변경.",
+  {
+    projectId: z.string().describe("프로젝트 ID"),
+    itemId: z.string().describe("견적서 ID (list_quotations에서 확보)"),
+    title: z.string().optional().describe("견적명"),
+    supplyAmount: z.number().optional().describe("공급가 (부가세 별도, 원 단위)"),
+    quoteDate: z.string().optional().describe("견적일 (YYYY-MM-DD)"),
+    validUntil: z.string().optional().describe("유효기간 (YYYY-MM-DD)"),
+    isFinal: z.boolean().optional().describe("최종본 여부"),
+    sheetUrl: z.string().optional().describe("견적서 링크"),
+    recipient: z.string().optional().describe("수신처"),
+    note: z.string().optional().describe("비고"),
+  },
+  async ({ projectId, itemId, ...fields }) => {
+    const data = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
+    if (Object.keys(data).length === 0) {
+      throw new Error("수정할 필드를 하나 이상 지정하세요");
+    }
+    const res = await erp.updateQuotation(projectId, itemId, data);
+    const q = res.quotation || res;
+    return { content: [{ type: "text", text: `견적서 수정 완료: ${q.title || itemId}\n변경 필드: ${Object.keys(data).join(", ")}` }] };
+  }
+);
+
+server.tool(
+  "delete_quotation",
+  "견적서 삭제 (소프트 삭제). itemId로 대상 지정. 잘못 등록된 견적서를 지울 때 사용.",
+  {
+    projectId: z.string().describe("프로젝트 ID"),
+    itemId: z.string().describe("견적서 ID (list_quotations에서 확보)"),
+  },
+  async ({ projectId, itemId }) => {
+    await erp.deleteQuotation(projectId, itemId);
+    return { content: [{ type: "text", text: `견적서 삭제 완료: ${itemId}` }] };
   }
 );
 
