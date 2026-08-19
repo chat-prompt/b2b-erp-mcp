@@ -649,7 +649,7 @@ server.tool(
     sessionId: z.string().optional().describe("세션 ID (있으면 우선)"),
     date: z.string().optional().describe("세션 날짜 YYYY-MM-DD (sessionId 없을 때 사용)"),
     instructorNames: z.array(z.string()).optional().describe("강사 본명 또는 닉네임 배열. 닉네임/접미사/부분일치 자동 매칭"),
-    instructorIds: z.array(z.string()).optional().describe("강사 ID 배열 (instructorNames 대신 직접 ID로 지정 가능)"),
+    instructorIds: z.array(z.string()).optional().describe("강사 ID 배열 (instructorNames 대신 직접 ID로 지정 가능). 프로젝트 강사 배정에 등록된 강사만 허용되며, 미등록 강사는 400으로 거부된다 - 먼저 외부 API POST /api/external/projects/:id/instructors 로 프로젝트에 배정할 것"),
   },
   async ({ projectId, sessionId, date, instructorNames, instructorIds }) => {
     const body = {};
