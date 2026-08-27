@@ -112,6 +112,7 @@ server.tool(
   "ERP 프로젝트 정보 수정 (단계, 일정, 매출 등)",
   {
     id: z.string().describe("프로젝트 ID"),
+    projectName: z.string().optional().describe("프로젝트명 (이름 변경)"),
     stage: z.enum(STAGES).optional().describe("단계 변경"),
     ownerName: z.string().optional().describe("담당자 변경"),
     educationStartDate: z.string().optional().describe("교육 시작일 (YYYY-MM-DD)"),
