@@ -553,7 +553,7 @@ server.tool(
 
 server.tool(
   "add_sessions",
-  "프로젝트에 교육 세션(날짜/시간) 등록. 캘린더 동기화 전에 먼저 세션을 등록해야 함.",
+  "프로젝트에 교육 세션(날짜/시간) 등록. 캘린더 동기화 전에 먼저 세션을 등록해야 함. 세션별로 파견자(운영 담당) 지정 가능.",
   {
     projectId: z.string().describe("프로젝트 ID"),
     sessions: z.array(z.object({
@@ -562,6 +562,7 @@ server.tool(
       endTime: z.string().optional().default("18:00").describe("종료 시간 (HH:MM)"),
       location: z.string().optional().describe("장소"),
       note: z.string().optional().describe("비고"),
+      dispatcherName: z.string().optional().describe("파견자(현장 운영 담당) 이름. 파견자 명단에 등록된 이름만 허용 — list_dispatchers로 확인"),
     })).describe("교육 세션 배열"),
   },
   async ({ projectId, sessions }) => {
@@ -766,7 +767,7 @@ server.tool(
 
 server.tool(
   "update_session",
-  "교육 세션의 시간/장소/비고 수정. sessionId 또는 date로 식별.",
+  "교육 세션의 시간/장소/비고/파견자 수정. sessionId 또는 date로 식별.",
   {
     projectId: z.string().describe("프로젝트 ID"),
     sessionId: z.string().optional().describe("세션 ID"),
@@ -776,8 +777,9 @@ server.tool(
     endTime: z.string().optional().describe("종료 시간 HH:MM"),
     location: z.string().optional().describe("장소"),
     note: z.string().optional().describe("비고"),
+    dispatcherName: z.string().optional().describe("파견자(현장 운영 담당) 이름. 파견자 명단에 등록된 이름만 허용 — list_dispatchers로 확인. 빈 문자열을 주면 파견자 해제"),
   },
-  async ({ projectId, sessionId, date, newDate, startTime, endTime, location, note }) => {
+  async ({ projectId, sessionId, date, newDate, startTime, endTime, location, note, dispatcherName }) => {
     const body = {};
     if (sessionId) body.sessionId = sessionId;
     if (date) body.date = date;
@@ -786,12 +788,33 @@ server.tool(
     if (endTime !== undefined) body.endTime = endTime;
     if (location !== undefined) body.location = location;
     if (note !== undefined) body.note = note;
+    if (dispatcherName !== undefined) body.dispatcherName = dispatcherName;
     const updated = await erp.patchSession(projectId, body);
     return {
       content: [{
         type: "text",
-        text: `세션 수정 완료: ${updated.date?.slice(0, 10)} ${updated.startTime}-${updated.endTime}${updated.location ? ` @ ${updated.location}` : ""}`,
+        text: `세션 수정 완료: ${updated.date?.slice(0, 10)} ${updated.startTime}-${updated.endTime}${updated.location ? ` @ ${updated.location}` : ""}${updated.dispatcherName ? ` | 파견자: ${updated.dispatcherName}` : ""}`,
       }],
+    };
+  }
+);
+
+server.tool(
+  "list_dispatchers",
+  "파견자(현장 운영 담당) 명단 조회. 세션에 파견자를 지정하기 전에 유효한 이름을 확인하는 용도 — 명단에 없는 이름은 거부된다.",
+  {
+    includeInactive: z.boolean().optional().describe("true면 비활성 파견자도 포함 (기본: 활성만)"),
+  },
+  async ({ includeInactive }) => {
+    const members = await erp.listDispatcherMembers({ includeInactive });
+    if (!Array.isArray(members) || members.length === 0) {
+      return { content: [{ type: "text", text: "등록된 파견자가 없습니다." }] };
+    }
+    const lines = members.map(
+      (m) => `· ${m.name}${m.email ? ` | ${m.email}` : ""}${m.active === false ? " | (비활성)" : ""}`
+    );
+    return {
+      content: [{ type: "text", text: `파견자 ${members.length}명\n${lines.join("\n")}` }],
     };
   }
 );

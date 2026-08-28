@@ -16,7 +16,7 @@ claude mcp add b2b-erp -s user --env B2B_ERP_API_KEY=받은_키 -- npx -y github
 
 거꾸로 말하면, 로컬에서 이 리포를 고쳐도 main에 push하지 않으면 아무에게도 반영되지 않습니다.
 
-## 제공 도구 (28개)
+## 제공 도구 (29개)
 
 ### 조회
 - `list_projects` - 프로젝트 목록 (단계/담당자 필터)
@@ -31,12 +31,14 @@ claude mcp add b2b-erp -s user --env B2B_ERP_API_KEY=받은_키 -- npx -y github
 - `list_vouchers` - 상품권 발송 배치
 - `get_activity` - 활동 이력 (누가 언제 무엇을 바꿨는지)
 - `list_quotations` - 프로젝트 견적서 목록 (견적명·공급가·최종본·시트/문서 링크)
+- `list_dispatchers` - 파견자(현장 운영 담당) 명단 — 세션에 파견자 지정 전 유효한 이름 확인용
 
 ### 생성·수정
 - `create_project` / `update_project` - 프로젝트 생성 / 수정
 - `create_account` - 거래처 생성
 - `add_note` - 프로젝트 메모 추가
-- `add_sessions` / `update_session` / `delete_sessions` - 교육 세션 등록 / 수정(시간·장소·비고) / 삭제
+- `add_sessions` / `update_session` / `delete_sessions` - 교육 세션 등록 / 수정(시간·장소·비고·파견자) / 삭제
+- 세션 파견자는 `add_sessions`의 `dispatcherName` 또는 `update_session`으로 지정. 파견자 명단에 있는 이름만 허용되고, 빈 문자열을 주면 해제된다
 - `assign_session_instructors` - 세션별 강사 배정 (본명·닉네임 자동 매칭)
 - `add_revenue_item` / `add_cost_item` - 매출 항목 / 기타비용 항목 추가
 - `update_instructor` - 강사 정보 수정 (계좌·주민번호·정산 필드는 제외)
@@ -47,7 +49,7 @@ claude mcp add b2b-erp -s user --env B2B_ERP_API_KEY=받은_키 -- npx -y github
 - `import_sessions_from_calendar` - 캘린더 일정을 ERP 세션으로
 - `list_calendar_events` - 다가오는 일정 조회
 
-OAuth를 설정하지 않아도 위 28개는 모두 동작합니다. 캘린더 4개 도구만 추가로 나타납니다.
+OAuth를 설정하지 않아도 위 29개는 모두 동작합니다. 캘린더 4개 도구만 추가로 나타납니다.
 
 ## 캘린더 기능 활성화 (선택)
 
