@@ -101,7 +101,10 @@ ${instructors || "  없음"}
 ## 최근 메모
 ${notes || "  없음"}
 
-ERP 링크: https://b2b-sales-three.vercel.app/projects/${p.id}`;
+${(p.accessInfo && p.accessInfo.length) ? `## 접근·운영 정보
+${p.accessInfo.map((a) => `  - ${a.label}: ${[a.url, a.code ? `코드 ${a.code}` : null, a.note].filter(Boolean).join(" · ") || "-"}`).join("\n")}
+
+` : ""}ERP 링크: https://b2b-sales-three.vercel.app/projects/${p.id}`;
 
     return { content: [{ type: "text", text }] };
   }
@@ -126,6 +129,12 @@ server.tool(
     lossReason: z.string().optional().describe("실주 사유"),
     studentPageUrl: z.string().optional().describe("수강생 공유 페이지 URL (수강생이 보는 교안·학습자료·강의 페이지. 접근 코드 포함 전체 URL)"),
     instructorPageUrl: z.string().optional().describe("강사·운영진 공유 페이지 URL (운영관리 시트·마스터 페이지·출결/일정 관리. 수강생용과 혼동 금지)"),
+    accessInfo: z.array(z.object({
+      label: z.string().describe("이름 (예: 운영허브, 오픈채팅방)"),
+      url: z.string().optional().describe("링크"),
+      code: z.string().optional().describe("접근 코드·참여 코드"),
+      note: z.string().optional().describe("비고"),
+    })).nullable().optional().describe("접근·운영 정보 표 전체 교체. 페이지 접근 코드·오픈채팅방 등 흩어지기 쉬운 링크·코드 모음. 기존 표를 get_project로 읽어 병합 후 전체를 다시 보낼 것 (부분 추가 아님). null이면 표 삭제"),
   },
   async ({ id, ...fields }) => {
     // Remove undefined fields
