@@ -145,6 +145,38 @@ server.tool(
 );
 
 server.tool(
+  "update_access_info",
+  "프로젝트의 접근·운영 정보 표(수강생 페이지·운영 화면 주소와 비밀번호, 오픈채팅방 등)를 등록·수정한다. 기본은 병합: 같은 이름(label)의 행은 교체되고 새 이름은 추가되며, 기존의 다른 행은 그대로 남는다. 행을 지우려면 removeLabels에 이름을 넣는다. 이 도구는 접근·운영 정보만 바꾸고 다른 프로젝트 필드는 절대 건드리지 않는다.",
+  {
+    id: z.string().describe("프로젝트 ID (UUID)"),
+    rows: z.array(z.object({
+      label: z.string().describe("이름 (예: 운영허브, 수강생 페이지, 오픈채팅방)"),
+      url: z.string().optional().describe("링크 (그대로 눌러서 열리는 주소)"),
+      code: z.string().optional().describe("비밀번호·접근 코드·참여 코드"),
+      note: z.string().optional().describe("비고 - 팀원이 읽는 쉬운 말로. 누가 쓰는 페이지인지, 뭘 하면 되는지만"),
+    })).optional().describe("등록·수정할 행. 같은 label이 이미 있으면 그 행을 교체"),
+    removeLabels: z.array(z.string()).optional().describe("지울 행의 label 목록"),
+  },
+  async ({ id, rows = [], removeLabels = [] }) => {
+    const current = await erp.getProject(id);
+    const existing = Array.isArray(current.accessInfo) ? current.accessInfo : [];
+    const removeSet = new Set(removeLabels.map((l) => l.trim()));
+    const incoming = new Map(rows.filter((r) => r.label && r.label.trim()).map((r) => [r.label.trim(), r]));
+    const merged = [];
+    for (const row of existing) {
+      const key = (row.label || "").trim();
+      if (removeSet.has(key)) continue;
+      if (incoming.has(key)) { merged.push(incoming.get(key)); incoming.delete(key); }
+      else merged.push(row);
+    }
+    for (const r of incoming.values()) merged.push(r);
+    await erp.updateProject(id, { accessInfo: merged.length ? merged : null });
+    const lines = merged.map((r) => `  - ${r.label}: ${[r.url, r.code ? `코드 ${r.code}` : null].filter(Boolean).join(" · ") || "-"}`);
+    return { content: [{ type: "text", text: `접근·운영 정보 갱신 완료 (${current.projectName || id})\n현재 표 ${merged.length}행:\n${lines.join("\n")}` }] };
+  }
+);
+
+server.tool(
   "create_project",
   "ERP 신규 프로젝트 생성 (인바운드 문의 등록). projectName, accountId, ownerName 필수. accountId가 없으면 먼저 create_account로 거래처를 만든다.",
   {
