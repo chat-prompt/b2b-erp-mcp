@@ -1,6 +1,18 @@
 # STATUS — b2b-erp-mcp (ERP를 클로드·봇에서 쓰게 만드는 통로)
 
-업데이트: 2026-08-14
+업데이트: 2026-09-01
+
+## 최신 (2026-09-01) - 접근·운영 정보(accessInfo) 지원 + 봇 쓰기 개방
+- **배경**: ERP Project에 accessInfo Json 필드가 생김(b2b-sales main). 수강생 페이지·운영 화면 주소와 비밀번호, 오픈채팅방을 프로젝트 상세 "접근·운영 정보" 표로 모으는 필드. 활성·최근 완료 17개 프로젝트에 데이터 입력 완료.
+- **이 리포 변경 2건 (main push 완료)**:
+  - `get_project` 출력에 "## 접근·운영 정보" 섹션 추가, `update_project`에 accessInfo 파라미터(전체 교체 방식, 병합 후 전송 필요) 추가.
+  - **`update_access_info` 신설**: 접근·운영 정보만 만지는 전용 쓰기 도구. 병합 방식(같은 label 교체·새 label 추가·나머지 보존, 삭제는 removeLabels로만)이라 표 전체가 날아가는 실수를 구조적으로 차단. 병합·삭제는 실데이터 왕복으로 검증함. 비투비서에게는 이 도구만 열었다(update_project는 여전히 봇 권한 밖).
+- **봇 반영**: `~/.claude/settings.json`(봇에 실제 먹히는 곳)과 `~/clawd/.claude/settings.local.json` allow에 update_access_info 추가, `~/clawd/TOOLS.md`에 사용 규칙(실행 전 한 줄 확인, 비고는 쉬운 말) 추가, npx 캐시 비우고 게이트웨이 재시작. 새 슬랙 스레드부터 유효.
+
+## 최신 (2026-08-19) - 세션 강사 배정 데이터 정합 가드
+- **사고**: `assign_session_instructors`의 `instructorIds` 우회 경로로 프로젝트 미배정 강사(김민철)를 세션에 붙였더니, 세션엔 있는데 ERP 강사 탭(ProjectInstructor)엔 없는 불일치가 생김(가경 발견, SKT 팀장 과정 edu075). 데이터는 Prisma로 행 생성해 복구.
+- **가드 배포**: ERP API PATCH `/projects/:id/sessions`가 이제 instructorIds도 프로젝트 강사 배정 기준으로 검증, 미배정 강사는 400 거부 + 등록 엔드포인트 안내 (b2b-sales main `8bf859b`, 프로덕션 실호출로 검증 완료).
+- **이 리포**: instructorIds 파라미터 설명에 거부 규칙과 올바른 순서(POST `/projects/:id/instructors` 먼저) 명시 (main `c5fbfc4` push 완료). npx 사용자는 Claude Code 재시작 시 반영.
 
 ## 한 줄 요약
 로컬 stdio MCP는 도구 24개로 정상 동작(0단계 완료). 팀원 배포는 ERP 안에 원격 MCP를 만드는 방향으로 설계 확정, 권한 게이트 작업이 선행 조건.
