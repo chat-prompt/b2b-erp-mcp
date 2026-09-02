@@ -1,6 +1,13 @@
 # STATUS — b2b-erp-mcp (ERP를 클로드·봇에서 쓰게 만드는 통로)
 
-업데이트: 2026-09-01
+업데이트: 2026-09-02
+
+## 최신 (2026-09-02) - 목록 도구 "총 N건" 오표기 수정 (맹미나 제보, 미push)
+- **증상**: `list_projects(limit=1)`이 "총 1건"으로 시작해, MCP로 붙은 에이전트가 잘린 수를 전체 건수로 집계(실제 95건을 60건으로 센 사고). 서버는 이미 `total`을 주는데 index.js가 `projects.length`를 찍고 있었다.
+- **수정 (로컬, 실데이터 검증 완료)**: `countHeader()` 헬퍼 신설. list_projects → "총 95건 중 30건 표시 (limit=30, 더 있음)" / 다 보이면 "총 95건". get_activity → nextCursor 노출해 "N건 표시 (더 있음, 전체 건수 아님)" 또는 "(이 조건의 전부)". get_notes·list_vouchers → 서버가 total 없이 최신 50·20건만 주므로 그 상한에 닿으면 "전체 건수는 이보다 많을 수 있음" 경고(상수 NOTES_SERVER_CAP/VOUCHERS_SERVER_CAP, b2b-sales take 값과 수동 동기화).
+- **영향 없음 확인**: list_accounts·list_instructors·list_invoices·get_sessions·list_quotations는 서버가 자르지 않아 "총 N건"이 정확.
+- **다음**: main push → 팀원은 CC 재시작, 비투비서는 npx 캐시 비우고 게이트웨이 재시작. get_notes·list_vouchers의 정확한 전체 건수는 b2b-sales 라우트에 count 추가해야 가능(선택).
+- **비투비서 무응답 원인(같은 날)**: 10:43~10:56 맥 DNS 고질병으로 슬랙 소켓 죽어 있던 사이 10:48 멘션이 유실됨. health-monitor가 자동 복구, 현재 정상. 코드 문제 아님.
 
 ## 최신 (2026-09-01) - 접근·운영 정보(accessInfo) 지원 + 봇 쓰기 개방
 - **배경**: ERP Project에 accessInfo Json 필드가 생김(b2b-sales main). 수강생 페이지·운영 화면 주소와 비밀번호, 오픈채팅방을 프로젝트 상세 "접근·운영 정보" 표로 모으는 필드. 활성·최근 완료 17개 프로젝트에 데이터 입력 완료.

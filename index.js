@@ -17,6 +17,20 @@ erp.setApiKey(API_KEY);
 // ── ERP enum 값 (b2b-sales/src/lib/constants.ts 와 동기화) ──
 // 드롭다운 고정값. 자유입력 금지 — z.enum으로 잠가 무효값을 거부하고 유효값을 스키마에 노출한다.
 const SEGMENTS = ["대기업", "중견기업", "중소기업", "스타트업", "공공기관", "교육기관", "비영리단체", "기타"];
+// 목록 도구 공통: limit에 잘린 수를 "총"으로 읽지 않게 머리줄을 만든다.
+// total(서버 전체 건수)이 있으면 "총 N건 중 M건 표시", 없으면 표시 건수만 적는다.
+function countHeader(shown, total, limit) {
+  if (typeof total === "number") {
+    return shown < total
+      ? `총 ${total}건 중 ${shown}건 표시 (limit=${limit}, 더 있음)`
+      : `총 ${total}건`;
+  }
+  return `${shown}건 표시`;
+}
+// ERP API가 total 없이 최신 N건만 돌려주는 엔드포인트의 서버측 상한 (b2b-sales external 라우트 take 값과 동기화)
+const NOTES_SERVER_CAP = 50;
+const VOUCHERS_SERVER_CAP = 20;
+
 const INDUSTRIES = ["IT/소프트웨어", "통신", "금융/보험", "제조", "건설/엔지니어링", "에너지/화학", "유통/물류", "의료/제약", "미디어/엔터테인먼트", "교육", "컨설팅/전문서비스", "소비재", "자동차/운송", "부동산", "공공/정부", "기타"];
 const LEAD_SOURCES = ["인바운드", "아웃바운드", "소개/추천", "기존고객", "웹사이트", "세미나", "기타"];
 const PROJECT_TYPES = ["교육과정", "컨설팅", "기타"];
@@ -47,7 +61,7 @@ server.tool(
     const lines = projects.map((p) =>
       `[${p.projectCode || "미발번"}] ${p.projectName} | ${p.companyName || ""} | ${p.stage} | ${p.ownerName || ""} | 예상매출 ${Number(p.expectedRevenueAmount || 0).toLocaleString()}원 | id:${p.id}`
     );
-    return { content: [{ type: "text", text: `총 ${projects.length}건\n\n${lines.join("\n")}` }] };
+    return { content: [{ type: "text", text: `${countHeader(projects.length, data.total, limit)}\n\n${lines.join("\n")}` }] };
   }
 );
 
@@ -392,7 +406,11 @@ server.tool(
       const who = n.author?.name || n.author || "";
       return `[${when}]${who ? ` ${who}` : ""}\n${n.content}`;
     });
-    return { content: [{ type: "text", text: `메모 ${notes.length}건 (표시 ${Math.min(notes.length, limit)}건)\n\n${lines.join("\n\n")}` }] };
+    const shown = Math.min(notes.length, limit);
+    const head = notes.length >= NOTES_SERVER_CAP
+      ? `메모 ${shown}건 표시 (서버가 최신 ${NOTES_SERVER_CAP}건까지만 주므로 전체 건수는 이보다 많을 수 있음)`
+      : `메모 총 ${notes.length}건 중 ${shown}건 표시${shown < notes.length ? " (더 있음, limit 올려서 재조회)" : ""}`;
+    return { content: [{ type: "text", text: `${head}\n\n${lines.join("\n\n")}` }] };
   }
 );
 
@@ -497,7 +515,10 @@ server.tool(
       const when = (b.createdAt || "").slice(0, 10);
       return `· ${name} | ${b.status} | 생성 ${when} | id:${b.id}`;
     });
-    return { content: [{ type: "text", text: `상품권 배치 ${batches.length}건\n${lines.join("\n")}` }] };
+    const head = batches.length >= VOUCHERS_SERVER_CAP
+      ? `상품권 배치 ${batches.length}건 표시 (서버가 최신 ${VOUCHERS_SERVER_CAP}건까지만 주므로 전체 건수는 이보다 많을 수 있음)`
+      : `상품권 배치 ${batches.length}건`;
+    return { content: [{ type: "text", text: `${head}\n${lines.join("\n")}` }] };
   }
 );
 
@@ -512,7 +533,7 @@ server.tool(
     dateTo: z.string().optional().describe("종료일 (YYYY-MM-DD)"),
   },
   async ({ limit, projectId, entityType, dateFrom, dateTo }) => {
-    const logs = await erp.getActivity({ limit, projectId, entityType, dateFrom, dateTo });
+    const { logs, nextCursor } = await erp.getActivity({ limit, projectId, entityType, dateFrom, dateTo });
     if (logs.length === 0) {
       return { content: [{ type: "text", text: "해당 조건의 활동 이력 없음" }] };
     }
@@ -521,7 +542,8 @@ server.tool(
       const target = l.entityName || l.projectName || l.entityId || "";
       return `· ${when} | ${l.actorName || "?"} | ${l.action} ${l.entityType}${target ? ` (${target})` : ""}`;
     });
-    return { content: [{ type: "text", text: `활동 이력 ${logs.length}건\n${lines.join("\n")}` }] };
+    const head = `활동 이력 ${logs.length}건 표시${nextCursor ? " (더 있음, 전체 건수 아님)" : " (이 조건의 전부)"}`;
+    return { content: [{ type: "text", text: `${head}\n${lines.join("\n")}` }] };
   }
 );
 
