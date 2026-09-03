@@ -118,7 +118,7 @@ ${notes || "  없음"}
 ${(p.accessInfo && p.accessInfo.length) ? `## 접근·운영 정보
 ${p.accessInfo.map((a) => `  - ${a.label}: ${[a.url, a.code ? `코드 ${a.code}` : null, a.note].filter(Boolean).join(" · ") || "-"}`).join("\n")}
 
-` : ""}ERP 링크: https://b2b-sales-three.vercel.app/projects/${p.id}`;
+` : ""}${p.groupId ? `묶음(세금계산서 발행 단위): ${p.group?.groupName || ""} | 묶음 청구액 ${p.group?.invoiceAmount ? Number(p.group.invoiceAmount).toLocaleString() + "원" : "미입력"} | 수금상태 ${p.group?.paymentStatus || "-"} (id:${p.groupId} — get_project_group/update_group_invoice로 조회·수정)\n\n` : ""}ERP 링크: https://b2b-sales-three.vercel.app/projects/${p.id}`;
 
     return { content: [{ type: "text", text }] };
   }
@@ -465,6 +465,59 @@ server.tool(
         text: `세금계산서 ${invoices.length}건${month ? ` (${month})` : ""}\n합계 ${total.toLocaleString()}원 | 입금 ${paid.toLocaleString()}원 | 미수 ${outstanding.toLocaleString()}원\n\n${lines.join("\n")}`,
       }],
     };
+  }
+);
+
+server.tool(
+  "get_project_group",
+  "프로젝트 묶음(2개 이상 프로젝트를 하나의 세금계산서로 발행하는 단위) 상세 조회 — 묶음 청구액·세금유형·발행일·수금상태 + 소속 프로젝트 매출 합계. list_invoices에서 '묶음' 표시된 항목의 실제 상세/수정은 여기·update_group_invoice로.",
+  {
+    id: z.string().describe("묶음(ProjectGroup) ID — get_project 결과의 groupId 필드에서 확보"),
+  },
+  async ({ id }) => {
+    const g = await erp.getProjectGroup(id);
+    const revenueTotal = g.revenueTotal ?? 0;
+    const invoiceAmount = g.invoiceAmount != null ? Number(g.invoiceAmount) : null;
+    const mismatch = invoiceAmount !== null && revenueTotal > 0 && invoiceAmount !== revenueTotal;
+    const projectLines = (g.projects || [])
+      .map((p) => `  - [${p.projectCode || "미발번"}] ${p.projectName} | 매출 ${p.revenueItems.reduce((s, r) => s + Number(r.amount), 0).toLocaleString()}원`)
+      .join("\n");
+
+    const text = `# 묶음: ${g.groupName} (id:${g.id})
+
+묶음 청구액(invoiceAmount): ${invoiceAmount !== null ? invoiceAmount.toLocaleString() + "원" : "미입력"}
+소속 프로젝트 매출 합계: ${revenueTotal.toLocaleString()}원
+${mismatch ? "⚠️ 묶음 청구액과 소속 프로젝트 매출 합계가 다릅니다 — 한쪽만 수정됐을 수 있음\n" : ""}세금유형: ${g.taxType || "미지정"} | 발행방식: ${g.invoiceMethod || "미지정"}
+계산서 발행일: ${(g.invoiceIssueDate || "").slice(0, 10) || "미정"} | 입금예정일: ${(g.expectedPaymentDate || "").slice(0, 10) || "미정"} | 실입금일: ${(g.actualPaymentDate || "").slice(0, 10) || "미정"}
+수금상태: ${g.paymentStatus} | 입금액: ${g.paidAmount ? Number(g.paidAmount).toLocaleString() + "원" : "-"}
+비고: ${g.invoiceNote || "-"}
+
+## 소속 프로젝트 (${(g.projects || []).length}개)
+${projectLines || "  없음"}`;
+
+    return { content: [{ type: "text", text }] };
+  }
+);
+
+server.tool(
+  "update_group_invoice",
+  "프로젝트 묶음(2개 이상 프로젝트를 하나의 세금계산서로 발행하는 단위)의 세금계산서 발행 정보 수정. 소속 프로젝트별 매출액을 바꿔도 묶음 청구액(invoiceAmount)은 자동으로 안 바뀌므로, 할인·금액 변경 시 이 도구로 같이 정정해야 함. 소속 프로젝트 추가/제거는 여기서 못 함(ERP 화면 전용).",
+  {
+    id: z.string().describe("묶음(ProjectGroup) ID — get_project_group 또는 get_project의 groupId로 확보"),
+    invoiceAmount: z.number().optional().describe("묶음 세금계산서 금액 (원). 소속 프로젝트 매출 합계와 일치시키는 용도로 주로 사용"),
+    taxType: z.enum(["withholding", "tax_invoice", "tax_exempt", "other"]).optional().describe("세금유형"),
+    invoiceMethod: z.enum(["direct", "reverse"]).optional().describe("발행방식 (direct=정발행 우리가 발행 / reverse=역발행 고객사가 발행)"),
+    invoiceIssueDate: z.string().optional().describe("계산서 발행일 (YYYY-MM-DD)"),
+    expectedPaymentDate: z.string().optional().describe("입금 예정일 (YYYY-MM-DD)"),
+    actualPaymentDate: z.string().optional().describe("실 입금일 (YYYY-MM-DD). 채우면 수금상태가 자동으로 paid로 전환되고 소속 프로젝트 매출항목까지 함께 입금 처리됨"),
+    paymentStatus: z.enum(["not_billed", "billed", "partially_paid", "paid"]).optional().describe("수금 상태"),
+    paidAmount: z.number().optional().describe("입금액 (원)"),
+    invoiceNote: z.string().optional().describe("비고 — ⚠️타 법인/고객사에 노출될 수 있는 세금계산서이므로 그룹 총액·안분 내역 등 내부 정보를 적지 말 것"),
+  },
+  async ({ id, ...fields }) => {
+    const data = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
+    const result = await erp.updateProjectGroup(id, data);
+    return { content: [{ type: "text", text: `묶음 세금계산서 정보 수정 완료: ${result.groupName || id}` }] };
   }
 );
 
