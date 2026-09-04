@@ -38,7 +38,7 @@ claude mcp add b2b-erp -s user --env B2B_ERP_API_KEY=받은_키 -- npx -y github
 - `create_project` / `update_project` - 프로젝트 생성 / 수정
 - `create_account` - 거래처 생성
 - `add_note` - 프로젝트 메모 추가
-- `add_interaction` - 거래처 접촉 기록 추가 (occurredAt·content 필수, kind·outcome·contactName·nextStep·sourceUrl 선택)
+- `add_interaction` - 거래처 접촉 기록 추가 (occurredAt·content 필수, kind·outcome·contactName·nextStep·nextStepDue·sourceUrl 선택)
 - `add_sessions` / `update_session` / `delete_sessions` - 교육 세션 등록 / 수정(시간·장소·비고) / 삭제
 - `assign_session_instructors` - 세션별 강사 배정 (본명·닉네임 자동 매칭)
 - `add_revenue_item` / `add_cost_item` - 매출 항목 / 기타비용 항목 추가

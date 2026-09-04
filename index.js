@@ -338,6 +338,7 @@ server.tool(
       .optional()
       .describe("결과. positive=긍정, neutral=중립, negative=부정·거절, no_response=무응답"),
     nextStep: z.string().optional().describe("다음 액션 한 줄"),
+    nextStepDue: z.string().optional().describe("다음 액션 기한 (YYYY-MM-DD). 있어야 타겟 탭 재접촉 큐에 잡힌다"),
     sourceUrl: z.string().optional().describe("노션·리니어·슬랙 원본 링크 (http로 시작)"),
     actorName: z.string().optional().describe("기록을 남기는 사람 이름 (활동 로그 명의)"),
   },
@@ -466,7 +467,7 @@ server.tool(
         it.author?.name ? `- ${it.author.name}` : "",
       ].filter(Boolean).join(" ");
       const tail = [
-        it.nextStep ? `다음 액션: ${it.nextStep}` : "",
+        it.nextStep ? `다음 액션: ${it.nextStep}${it.nextStepDue ? ` (기한 ${String(it.nextStepDue).slice(0, 10)})` : ""}${it.nextStepDoneAt ? " [완료]" : ""}` : "",
         it.sourceUrl ? `원본: ${it.sourceUrl}` : "",
       ].filter(Boolean).join("\n");
       return `${head}\n${it.content}${tail ? `\n${tail}` : ""}`;
