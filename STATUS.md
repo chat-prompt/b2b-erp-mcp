@@ -1,6 +1,12 @@
 # STATUS — b2b-erp-mcp (ERP를 클로드·봇에서 쓰게 만드는 통로)
 
-업데이트: 2026-09-02
+업데이트: 2026-09-04
+
+## 최신 (2026-09-04) - 거래처 접촉 기록 도구 (main 4c38d89 push)
+- **add_interaction / get_interactions** 신설. ERP에 기업 접촉 기록(인터뷰·전화·미팅·메일)이 생겨서(EDU-10533) MCP에서도 남기고 읽는다. 외부 API `accounts/{id}/interactions`.
+- add_interaction: occurredAt(YYYY-MM-DD)·content 필수, kind(interview/call/meeting/email/message/event/other/memo)·outcome(positive/neutral/negative/no_response)·contactName·contactId·nextStep·**nextStepDue(기한)**·sourceUrl·actorName 선택. 기한이 있어야 ERP 타겟 탭 재접촉 큐에 잡힌다.
+- get_interactions: 접촉일 최신순, 다음 액션에 기한·[완료] 표시.
+- 봇 적용은 게이트웨이 재시작(npx 캐시 제거) 필요. 팀원 CC는 재시작만.
 
 ## 최신 (2026-09-02) - 목록 도구 "총 N건" 오표기 수정 (맹미나 제보, main bb11766 push·봇 재시작 완료)
 - **증상**: `list_projects(limit=1)`이 "총 1건"으로 시작해, MCP로 붙은 에이전트가 잘린 수를 전체 건수로 집계(실제 95건을 60건으로 센 사고). 서버는 이미 `total`을 주는데 index.js가 `projects.length`를 찍고 있었다.
