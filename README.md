@@ -22,6 +22,7 @@ claude mcp add b2b-erp -s user --env B2B_ERP_API_KEY=받은_키 -- npx -y github
 - `list_projects` - 프로젝트 목록 (단계/담당자 필터)
 - `get_project` - 프로젝트 상세 (매출/비용/강사/최근 메모)
 - `get_notes` - 프로젝트 메모 전체 (get_project는 최근 5건만)
+- `get_interactions` - 거래처 접촉 기록(인터뷰·전화·미팅·이메일) 최신순
 - `get_sessions` - 교육 세션 목록 (날짜·시간·장소·배정 강사)
 - `list_accounts` / `get_account` - 거래처 목록 / 상세
 - `list_instructors` / `get_instructor` - 강사 목록 / 상세
@@ -37,6 +38,7 @@ claude mcp add b2b-erp -s user --env B2B_ERP_API_KEY=받은_키 -- npx -y github
 - `create_project` / `update_project` - 프로젝트 생성 / 수정
 - `create_account` - 거래처 생성
 - `add_note` - 프로젝트 메모 추가
+- `add_interaction` - 거래처 접촉 기록 추가 (occurredAt·content 필수, kind·outcome·contactName·nextStep·sourceUrl 선택)
 - `add_sessions` / `update_session` / `delete_sessions` - 교육 세션 등록 / 수정(시간·장소·비고) / 삭제
 - `assign_session_instructors` - 세션별 강사 배정 (본명·닉네임 자동 매칭)
 - `add_revenue_item` / `add_cost_item` - 매출 항목 / 기타비용 항목 추가

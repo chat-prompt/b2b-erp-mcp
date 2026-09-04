@@ -321,6 +321,34 @@ server.tool(
 );
 
 server.tool(
+  "add_interaction",
+  "거래처(기업)에 접촉 기록 추가. 인터뷰·전화·미팅·이메일 같은 컨택 히스토리를 기업 단위로 남긴다. 프로젝트 메모(add_note)는 진행 중인 건의 이력이고, 이것은 프로젝트가 없어도 되는 기업 차원의 이력(수요발굴·인터뷰). 팀원이 읽는 글로 쓴다: 로컬 경로·파일명 금지, 라벨 한 줄씩(목적: / 들은 것: / 반응: / 거절 사유:).",
+  {
+    accountId: z.string().describe("거래처 ID. list_accounts에서 확보"),
+    occurredAt: z.string().describe("실제 접촉일 (YYYY-MM-DD). 필수"),
+    content: z.string().describe("접촉 내용. 라벨 한 줄씩 줄바꿈"),
+    kind: z
+      .enum(["interview", "call", "meeting", "email", "message", "event", "other"])
+      .optional()
+      .describe("유형 (기본 other). interview=인터뷰, call=전화, meeting=미팅, email=이메일, message=슬랙·카톡, event=행사"),
+    contactName: z.string().optional().describe("컨택 대상 이름·직함 (예: 김OO 팀장 (HR))"),
+    contactId: z.string().optional().describe("ERP 담당자(Contact) ID. 있으면 연결"),
+    outcome: z
+      .enum(["positive", "neutral", "negative", "no_response"])
+      .optional()
+      .describe("결과. positive=긍정, neutral=중립, negative=부정·거절, no_response=무응답"),
+    nextStep: z.string().optional().describe("다음 액션 한 줄"),
+    sourceUrl: z.string().optional().describe("노션·리니어·슬랙 원본 링크 (http로 시작)"),
+    actorName: z.string().optional().describe("기록을 남기는 사람 이름 (활동 로그 명의)"),
+  },
+  async ({ accountId, actorName, ...data }) => {
+    const res = await erp.addInteraction(accountId, { ...data, actorName });
+    const it = res.interaction || res;
+    return { content: [{ type: "text", text: `접촉 기록 추가 완료: ${(it.occurredAt || "").slice(0, 10)} ${it.kind || ""} ${it.contactName || ""}`.trim() }] };
+  }
+);
+
+server.tool(
   "list_instructors",
   "ERP 강사 목록 조회",
   {
@@ -411,6 +439,40 @@ server.tool(
       ? `메모 ${shown}건 표시 (서버가 최신 ${NOTES_SERVER_CAP}건까지만 주므로 전체 건수는 이보다 많을 수 있음)`
       : `메모 총 ${notes.length}건 중 ${shown}건 표시${shown < notes.length ? " (더 있음, limit 올려서 재조회)" : ""}`;
     return { content: [{ type: "text", text: `${head}\n\n${lines.join("\n\n")}` }] };
+  }
+);
+
+server.tool(
+  "get_interactions",
+  "거래처(기업) 접촉 기록 조회 (접촉일 최신순). 컨택 전에 이전에 누가 언제 무슨 얘기를 했는지 볼 때 쓴다.",
+  {
+    accountId: z.string().describe("거래처 ID. list_accounts에서 확보"),
+    limit: z.number().optional().default(20).describe("최대 건수"),
+  },
+  async ({ accountId, limit }) => {
+    const res = await erp.getInteractions(accountId);
+    const items = res.interactions || [];
+    if (items.length === 0) {
+      return { content: [{ type: "text", text: "접촉 기록 없음" }] };
+    }
+    const KIND = { interview: "인터뷰", call: "전화", meeting: "미팅", email: "이메일", message: "메시지", event: "행사", other: "기타" };
+    const OUT = { positive: "긍정", neutral: "중립", negative: "부정", no_response: "무응답" };
+    const lines = items.slice(0, limit).map((it) => {
+      const head = [
+        `[${(it.occurredAt || "").slice(0, 10)}]`,
+        KIND[it.kind] || it.kind,
+        it.contactName || "",
+        it.outcome ? `(${OUT[it.outcome] || it.outcome})` : "",
+        it.author?.name ? `- ${it.author.name}` : "",
+      ].filter(Boolean).join(" ");
+      const tail = [
+        it.nextStep ? `다음 액션: ${it.nextStep}` : "",
+        it.sourceUrl ? `원본: ${it.sourceUrl}` : "",
+      ].filter(Boolean).join("\n");
+      return `${head}\n${it.content}${tail ? `\n${tail}` : ""}`;
+    });
+    const shown = Math.min(items.length, limit);
+    return { content: [{ type: "text", text: `접촉 기록 ${items.length}건 중 ${shown}건\n\n${lines.join("\n\n")}` }] };
   }
 );
 
