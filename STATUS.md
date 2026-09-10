@@ -1,6 +1,12 @@
 # STATUS — b2b-erp-mcp (ERP를 클로드·봇에서 쓰게 만드는 통로)
 
-업데이트: 2026-09-04
+업데이트: 2026-09-10
+
+## 최신 (2026-09-10) - 내부 정책 문서 도구 4종 (get_current_policy 등)
+- **배경**: ERP에 「내부 정책」 탭(/policies, b2b-sales PR #99)이 생김. 교육 단가 정책 v3.2가 PDF(사람용)+MD(AI용) 한 세트로 현행 등록돼 있다. 김현철 조건("ERP든 에이전트든 불러다 쓰게") 충족용.
+- **get_current_policy**: 현행 교육 단가 정책 md 전문을 한 호출로. 견적·제안·단가 질문 전에 이걸 먼저 읽는 게 의도. external `GET /policies/current?category=pricing&format=md`.
+- **list_policy_documents / add_policy_link / update_policy_document**: 목록·링크 등록·메타 수정·현행 지정(makeCurrent). 파일 업로드는 MCP 스코프 밖(ERP 화면).
+- 봇 적용은 게이트웨이 재시작(npx 캐시 제거) 필요. 팀원 CC는 재시작만.
 
 ## 최신 (2026-09-04) - 거래처 접촉 기록 도구 (main 4c38d89 push)
 - **add_interaction / get_interactions** 신설. ERP에 기업 접촉 기록(인터뷰·전화·미팅·메일)이 생겨서(EDU-10533) MCP에서도 남기고 읽는다. 외부 API `accounts/{id}/interactions`.

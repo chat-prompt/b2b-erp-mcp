@@ -1072,5 +1072,84 @@ server.tool(
 } // end calendar tools block
 
 // ── Start ────────────────────────────────────────────
+// ── 내부 정책 문서 (교육 단가 정책 등) ─────────────────────
+// ERP 「내부 정책」 탭(/policies)의 문서. 프로젝트에 묶이지 않는 전사 기준. PDF(사람용)+MD(AI용)가 같은 버전으로 올라간다.
+// 파일 업로드는 MCP 스코프 밖(ERP 화면 또는 external upload 2단계) — 여기서는 조회·현행 본문 읽기·링크 등록·메타 수정만.
+const POLICY_CATEGORIES = ["pricing", "contract", "other"];
+const POLICY_LABELS = { pricing: "교육 단가", contract: "계약서 표준", other: "기타" };
+
+server.tool(
+  "get_current_policy",
+  "현행 내부 정책 문서 본문 읽기. 기본은 교육 단가 정책(pricing)의 마크다운 전문 — 견적·제안서·단가 질문에 답할 때 이걸 먼저 읽는다. format 생략 시 현행 버전의 파일 메타 목록만.",
+  {
+    category: z.enum(POLICY_CATEGORIES).optional().default("pricing").describe("pricing=교육 단가 · contract=계약서 표준 · other=기타"),
+    format: z.enum(["md"]).optional().default("md").describe("md=마크다운 본문 텍스트. 메타만 보려면 이 인자를 생략하지 말고 list_policy_documents(currentOnly) 사용"),
+  },
+  async ({ category, format }) => {
+    const r = await erp.getCurrentPolicy({ category, format });
+    if (format === "md") {
+      return { content: [{ type: "text", text: `# [현행 ${POLICY_LABELS[category]} 정책 · ${r.version || "버전 미기재"} · id:${r.documentId}]\n\n${r.text}` }] };
+    }
+    const lines = (r.documents || []).map((d) => `· ${d.title} | ${d.fileType || d.sourceType} | id:${d.id}`);
+    return { content: [{ type: "text", text: `현행 ${POLICY_LABELS[category]} ${r.version || ""}\n${lines.join("\n")}` }] };
+  }
+);
+
+server.tool(
+  "list_policy_documents",
+  "내부 정책 문서 목록 (카테고리·버전·현행 여부·파일 형식). 이전 버전 이력 확인이나 문서 id 확보용.",
+  {
+    category: z.enum(POLICY_CATEGORIES).optional().describe("카테고리 필터"),
+    currentOnly: z.boolean().optional().default(false).describe("true면 현행 버전만"),
+  },
+  async ({ category, currentOnly }) => {
+    const docs = await erp.listPolicyDocuments({ category, currentOnly });
+    if (docs.length === 0) return { content: [{ type: "text", text: "등록된 정책 문서 없음" }] };
+    const lines = docs.map((d) => {
+      const cat = d.category === "other" && d.categoryLabel ? d.categoryLabel : (POLICY_LABELS[d.category] || d.category);
+      const type = d.sourceType === "link" ? "링크" : d.fileType === "application/pdf" ? "PDF" : /markdown/.test(d.fileType || "") ? "MD" : (d.fileType || "파일");
+      return `· [${cat}] ${d.version || "-"} ${d.isCurrent ? "★현행" : ""} | ${d.title} | ${type} | ${(d.createdAt || "").slice(0, 10)}${d.note ? ` | ${d.note}` : ""} | id:${d.id}`;
+    });
+    return { content: [{ type: "text", text: `정책 문서 총 ${docs.length}건\n${lines.join("\n")}\n\n실물: https://b2b-sales-three.vercel.app/policies (파일 다운로드는 external /policies/{id})` }] };
+  }
+);
+
+server.tool(
+  "add_policy_link",
+  "내부 정책 문서를 링크(구글시트·노션·드라이브 URL)로 등록. 파일(PDF/MD) 업로드는 ERP 화면에서. 같은 카테고리에 현행이 없으면 자동으로 현행이 되고, 같은 버전에 현행 파일이 있으면 함께 현행이 된다.",
+  {
+    url: z.string().describe("http(s) 링크"),
+    title: z.string().describe("문서 제목"),
+    category: z.enum(POLICY_CATEGORIES).optional().default("other"),
+    categoryLabel: z.string().optional().describe("category=other 일 때 표시명 (예: 강사료 기준)"),
+    version: z.string().optional().describe("버전 (예: v3.2)"),
+    note: z.string().optional(),
+    actorName: z.string().optional().describe("등록자 표시명 (예: 이재혁)"),
+  },
+  async (args) => {
+    const d = await erp.addPolicyLink(args);
+    return { content: [{ type: "text", text: `등록됨: [${POLICY_LABELS[d.category] || d.category}] ${d.version || "-"} ${d.isCurrent ? "★현행" : ""} | ${d.title} | id:${d.id}` }] };
+  }
+);
+
+server.tool(
+  "update_policy_document",
+  "내부 정책 문서 메타 수정 (제목·버전·카테고리·비고) 또는 현행 지정. makeCurrent=true 면 그 문서의 category+version 전체(PDF·MD 같이)가 현행이 되고 같은 카테고리의 다른 버전은 현행 해제. 파일 실물은 못 바꾼다.",
+  {
+    itemId: z.string().describe("문서 ID (list_policy_documents에서 확보)"),
+    title: z.string().optional(),
+    version: z.string().optional().describe("빈 문자열이면 버전 제거"),
+    category: z.enum(POLICY_CATEGORIES).optional(),
+    categoryLabel: z.string().optional(),
+    note: z.string().optional(),
+    makeCurrent: z.boolean().optional().describe("true=이 버전을 현행으로 지정"),
+    actorName: z.string().optional(),
+  },
+  async ({ itemId, ...data }) => {
+    const d = await erp.updatePolicyDocument(itemId, data);
+    return { content: [{ type: "text", text: `수정됨: [${POLICY_LABELS[d.category] || d.category}] ${d.version || "-"} ${d.isCurrent ? "★현행" : ""} | ${d.title} | id:${d.id}` }] };
+  }
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
