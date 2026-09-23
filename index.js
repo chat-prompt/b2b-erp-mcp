@@ -32,7 +32,7 @@ const NOTES_SERVER_CAP = 50;
 const VOUCHERS_SERVER_CAP = 20;
 
 const INDUSTRIES = ["IT/소프트웨어", "통신", "금융/보험", "제조", "건설/엔지니어링", "에너지/화학", "유통/물류", "의료/제약", "미디어/엔터테인먼트", "교육", "컨설팅/전문서비스", "소비재", "자동차/운송", "부동산", "공공/정부", "기타"];
-const LEAD_SOURCES = ["인바운드", "아웃바운드", "소개/추천", "기존고객", "웹사이트", "세미나", "기타"];
+const LEAD_SOURCES = ["인바운드", "아웃바운드", "소개/추천", "기존고객", "웹사이트", "세미나", "웨비나", "기타"];
 const PROJECT_TYPES = ["교육과정", "컨설팅", "기타"];
 const DELIVERY_FORMATS = ["online", "offline", "hybrid"];
 const STAGES = ["lead", "meeting_done", "proposal_sent", "negotiating", "won", "preparing", "in_progress", "completed", "lost"];
