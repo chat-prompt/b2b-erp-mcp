@@ -16,7 +16,7 @@ claude mcp add b2b-erp -s user --env B2B_ERP_API_KEY=받은_키 -- npx -y github
 
 거꾸로 말하면, 로컬에서 이 리포를 고쳐도 main에 push하지 않으면 아무에게도 반영되지 않습니다.
 
-## 제공 도구 (34개)
+## 제공 도구 (36개)
 
 ### 조회
 - `list_projects` - 프로젝트 목록 (단계/담당자 필터)
@@ -34,6 +34,7 @@ claude mcp add b2b-erp -s user --env B2B_ERP_API_KEY=받은_키 -- npx -y github
 - `list_quotations` - 프로젝트 견적서 목록 (견적명·공급가·최종본·시트/문서 링크)
 - `get_current_policy` - **현행 내부 정책 본문**(기본: 교육 단가 정책 md 전문). 견적·제안·단가 질문 전에 먼저 읽기
 - `list_policy_documents` - 내부 정책 문서 목록 (카테고리·버전·현행·PDF/MD)
+- `list_cases` / `get_case` - 수강생 결과물 사례 인덱스 목록 / 상세 (데모 제작 스킬의 청사진 후보 — 유형·직무·태그·검색, 근거점수, 첨부 목록·받기 경로, 쓴 곳). 우리 데모(source=demo)는 기본 제외
 - `get_project_group` - 프로젝트 묶음(2개 이상 프로젝트를 하나의 세금계산서로 발행하는 단위) 상세 — 묶음 청구액·수금상태 + 소속 프로젝트 매출 합계 비교
 
 ### 생성·수정
@@ -54,7 +55,7 @@ claude mcp add b2b-erp -s user --env B2B_ERP_API_KEY=받은_키 -- npx -y github
 - `import_sessions_from_calendar` - 캘린더 일정을 ERP 세션으로
 - `list_calendar_events` - 다가오는 일정 조회
 
-OAuth를 설정하지 않아도 위 34개는 모두 동작합니다. 캘린더 4개 도구만 추가로 나타납니다.
+OAuth를 설정하지 않아도 위 36개는 모두 동작합니다. 캘린더 4개 도구만 추가로 나타납니다.
 
 ## 캘린더 기능 활성화 (선택)
 

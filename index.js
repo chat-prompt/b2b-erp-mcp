@@ -1151,5 +1151,68 @@ server.tool(
   }
 );
 
+// ── Cases (수강생 결과물 사례 인덱스) ───────────────────
+// 데모 제작 스킬(mvp-demo-factory)이 "과거 수강생이 만든 앱" 중 청사진을 고를 때 읽는다.
+// 우리가 만든 데모(source=demo)는 청사진 후보가 아니므로 기본 제외. 첨부(캡처)는 external API 경로로 x-api-key 로 받는다.
+const CASE_TYPES = ["문서·파일", "메일·커뮤니케이션", "판정·집계", "대화형·에이전트", "시뮬레이션·체험", "스크립트·파이프라인"];
+const CASE_SOURCES = ["archive", "demo", "mvp-archive", "hub"];
+const ERP_EXTERNAL_BASE = "https://b2b-sales-three.vercel.app/api/external";
+
+server.tool(
+  "list_cases",
+  "수강생 결과물 사례 인덱스 목록 (데모 제작 스킬의 청사진 후보). 유형·직무·니즈 태그·검색어로 거르고, 한 줄에 key·유형·제목·직무·태그·근거점수(0~7)·첨부 수·쓴 곳을 보여준다. 페이지: limit(기본 50)·offset. 응답 머리줄의 '더 있음'이 보이면 offset 을 올려 이어 읽을 것. 기본으로 우리 데모(source=demo)와 미완(incomplete) 카드는 제외.",
+  {
+    type: z.enum(CASE_TYPES).optional().describe("산출물 유형"),
+    job: z.string().optional().describe("직무 (부분 일치, 예: HR)"),
+    tag: z.string().optional().describe("니즈 태그 (정확히 일치, 예: 반복업무 효율화)"),
+    source: z.enum(CASE_SOURCES).optional().describe("출처. 지정하면 excludeDemo 무시"),
+    cohort: z.string().optional().describe("코호트 슬러그 (예: mysuni-hr-2)"),
+    q: z.string().optional().describe("제목·입력·출력·전후 문장 검색어"),
+    excludeDemo: z.boolean().optional().default(true).describe("우리 데모 제외 (기본 true — 청사진 후보만)"),
+    includeIncomplete: z.boolean().optional().default(false).describe("필수 필드 빠진 카드 포함"),
+    limit: z.number().int().min(1).max(200).optional().default(50),
+    offset: z.number().int().min(0).optional().default(0),
+  },
+  async (args) => {
+    const r = await erp.listCases(args);
+    const shown = r.cases.length;
+    const more = r.offset + shown < r.total;
+    const head = shown < r.total ? `총 ${r.total}건 중 ${r.offset + 1}~${r.offset + shown}번째 표시 (limit=${r.limit}${more ? `, 더 있음 → offset=${r.offset + shown}` : ""})` : `총 ${r.total}건`;
+    if (shown === 0) return { content: [{ type: "text", text: `${head}\n조건에 맞는 사례 없음` }] };
+    const lines = r.cases.map((c) => {
+      const a = c.assetCounts || {};
+      const att = [a.shot ? `캡처${a.shot}` : null, a.slide ? `슬라이드${a.slide}` : null, a.spec ? "기획서" : null].filter(Boolean).join("·") || "첨부없음";
+      return `· [${c.type || "?"}] ${c.title} | ${c.job || "-"} | ${(c.needTags || []).join(",") || "-"} | 근거 ${c.evidence ?? 0}/7 | ${att} | 쓴 곳: ${(c.usedIn || []).join(",") || "-"} | ${c.cohort || "-"}${c.project?.code ? `(${c.project.code})` : ""} | key:${c.caseKey}`;
+    });
+    return { content: [{ type: "text", text: `${head}\n${lines.join("\n")}\n\n상세·첨부: get_case(key). 화면: https://b2b-sales-three.vercel.app/cases` }] };
+  }
+);
+
+server.tool(
+  "get_case",
+  "사례 1건 상세 — 입력/출력/전후/화면 순서/분류 근거 + 첨부 목록(캡처·슬라이드·기획서) + 어느 데모에 썼나. key 는 case_key(hr2-01-a) 또는 uuid. 첨부 실물은 응답의 downloadUrl 에 x-api-key 헤더로 GET 하면 받을 수 있다(비공개 Blob 중계).",
+  { key: z.string().describe("case_key (예: hr2-01-a) 또는 uuid") },
+  async ({ key }) => {
+    const c = await erp.getCase(key);
+    const assets = (c.assets || []).map((a) => `  - [${a.kindLabel}] ${a.name} (${Math.round((a.bytes || 0) / 1024)}KB) → ${ERP_EXTERNAL_BASE}${a.path.replace(/^\/api\/external/, "")}`);
+    const usages = (c.usages || []).map((u) => `  - ${u.slug}${u.project?.code ? ` (${u.project.code})` : ""} ${String(u.usedAt || "").slice(0, 10)}`);
+    const text = [
+      `${c.title}  [key:${c.caseKey} · id:${c.id}]`,
+      `유형: ${c.type || "-"} · 직무: ${c.job || "-"} · 태그: ${(c.needTags || []).join(", ") || "-"}`,
+      `교육: ${c.project ? `${c.project.code || ""} ${c.project.name}`.trim() : c.cohort || "-"} · 출처: ${c.source || "-"} · 근거: ${c.evidence ?? 0}/7 · 동의: ${c.consent} · 품질: ${c.quality || (c.qualityHint ? `(${c.qualityHint} 제안)` : "-")}${c.incomplete ? " · ⚠ 미완" : ""}`,
+      c.liveUrl ? `배포 URL: ${c.liveUrl}` : null,
+      `입력: ${c.input || "-"}`,
+      `출력: ${c.output || "-"}`,
+      `전→후: ${c.beforeAfter || "-"}`,
+      `화면 순서: ${c.layout || "-"}`,
+      `분류 근거: ${c.reason || "-"}`,
+      `첨부 ${assets.length}건${assets.length ? ":\n" + assets.join("\n") : ""}`,
+      `쓴 곳 ${usages.length}건${usages.length ? ":\n" + usages.join("\n") : ""}`,
+      `첨부 받기: curl -H "x-api-key: $B2B_ERP_API_KEY" -o out.png "<위 URL>"`,
+    ].filter((l) => l !== null).join("\n");
+    return { content: [{ type: "text", text }] };
+  }
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
