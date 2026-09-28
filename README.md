@@ -1,8 +1,27 @@
 # B2B ERP MCP
 
+> [!IMPORTANT]
+> **이 레포는 2026-09-28부로 더 이상 업데이트하지 않습니다.** B2B ERP MCP는 ERP(`chat-prompt/b2b-sales`) 안의 원격 MCP로 옮겼습니다.
+> - 도구 이름·인자는 그대로입니다. 새 도구와 수정은 **원격 MCP에만** 들어갑니다 (`b2b-sales`의 `src/lib/mcp/tools.ts`). **이 레포에 도구를 추가하지 마세요.**
+> - 이 레포의 npx 방식은 당분간 동작하지만, 새 도구·수정이 반영되지 않습니다.
+> - 캘린더 도구 4개(`sync_to_calendar` 등)는 원격으로 옮기지 않았습니다. 강사 캘린더 초대는 ERP 「강사 안내 발송」을 쓰세요.
+>
+> **새 등록 (Claude Code)**
+> ```bash
+> claude mcp remove b2b-erp -s user
+> claude mcp add --transport http b2b-erp https://b2b-sales-three.vercel.app/api/mcp --header "x-api-key: <개인키>" -s user
+> ```
+> **새 등록 (Codex)**: `codex mcp remove b2b-erp` → `codex mcp add b2b-erp --url https://b2b-sales-three.vercel.app/api/mcp` → `~/.codex/config.toml`의 `[mcp_servers.b2b-erp]` 아래에 `http_headers = { "x-api-key" = "<개인키>" }` 한 줄 추가
+>
+> 개인키는 ERP 설정 > API 키에서 발급합니다. 자세한 전환 안내는 팀 슬랙 공지를 보세요.
+
+---
+
+아래는 옛 방식(npx) 안내입니다.
+
 지피터스 b2b-sales ERP를 Claude Code에서 조회/수정할 수 있는 MCP 서버.
 
-## 설치 (팀원용 한 줄)
+## 설치 (옛 방식)
 
 ```bash
 claude mcp add b2b-erp -s user --env B2B_ERP_API_KEY=받은_키 -- npx -y github:chat-prompt/b2b-erp-mcp
