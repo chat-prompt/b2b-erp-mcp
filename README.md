@@ -49,6 +49,7 @@ claude mcp add b2b-erp -s user --env B2B_ERP_API_KEY=받은_키 -- npx -y github
 - `update_instructor` - 강사 정보 수정 (계좌·주민번호·정산 필드는 제외)
 - `add_quotation` / `update_quotation` / `delete_quotation` - 견적서 추가 / 수정 / 삭제 (공급가·견적일·시트링크·수신처, 소프트삭제)
 - `add_policy_link` / `update_policy_document` - 내부 정책 문서 링크 등록 / 메타 수정·현행 지정 (파일 업로드는 ERP 「내부 정책」 화면에서)
+- `add_case` / `update_case` / `add_case_usage` - 사례 카드 등록(caseKey upsert, 사람 칸 보존) / 자동 칸 수정(**본인이 올린 것만**) / "어느 데모에 썼나" 기록. 동의·품질·메모·숨김은 ERP 「사례 인덱스」 화면에서만
 - `update_group_invoice` - 묶음 세금계산서 발행 정보 수정 (금액·세금유형·발행방식·발행일·입금상태·비고). 소속 프로젝트 매출을 바꿔도 묶음 청구액은 자동으로 안 바뀌므로, 금액 변경 시 이 도구로 같이 정정 필요
 
 ### 캘린더 동기화 (Google OAuth 설정 시에만 등록)

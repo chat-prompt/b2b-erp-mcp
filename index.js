@@ -1214,5 +1214,71 @@ server.tool(
   }
 );
 
+const CASE_CONSENTS = ["none", "asked", "granted", "denied"];
+const CASE_QUALITIES = ["A", "B", "C"];
+const caseAutoFields = {
+  title: z.string().optional(),
+  type: z.enum(CASE_TYPES).optional(),
+  job: z.string().optional().describe("만든 사람 직무"),
+  needTags: z.array(z.string()).optional().describe("해결한 니즈 태그"),
+  input: z.string().optional().describe("뭘 넣으면"),
+  output: z.string().optional().describe("뭐가 나오나"),
+  beforeAfter: z.string().optional().describe("Before → After 한 줄"),
+  layout: z.string().optional().describe("화면 뼈대 순서 (upload → verdict-table → …)"),
+  liveUrl: z.string().optional().describe("배포 URL"),
+  evidence: z.number().int().min(0).max(7).optional().describe("근거 점수 0~7"),
+  qualityHint: z.enum(CASE_QUALITIES).optional().describe("분류기가 제안하는 등급 (사람 칸 quality 는 화면에서)"),
+  reason: z.string().optional().describe("분류 근거"),
+  cohort: z.string().optional().describe("코호트 슬러그"),
+  projectCode: z.string().optional().describe("어느 교육인지 ERP 프로젝트 코드 (예: 20260707_edu067)"),
+  incomplete: z.boolean().optional(),
+  actorName: z.string().optional().describe("요청자 표시명 (예: 이재혁)"),
+};
+
+server.tool(
+  "add_case",
+  "수강생 결과물 사례 카드 등록 (교육 마감 때 스킬이 호출). caseKey 기준 upsert — 이미 있으면 자동 칸만 갱신하고 사람 칸(consent·quality·note)은 서버가 보존, usedIn 은 새 슬러그만 추가. 첨부(캡처)는 external POST /cases/{id}/assets 로 따로(스킬 import_to_erp.py). 개인 키로 올리면 created_by_user_id 가 남아 나중에 본인만 update_case 가능.",
+  {
+    caseKey: z.string().describe("사례 고유 번호 (예: hr3-02-a). 영문·숫자·-·_"),
+    source: z.enum(CASE_SOURCES).optional().default("archive").describe("archive=수강생 결과물(기본) · hub · demo(우리 데모, 청사진 후보 제외)"),
+    learnerRef: z.string().optional().describe("원본 폴더명 — 내부 전용, API 로 안 나감"),
+    consent: z.enum(CASE_CONSENTS).optional().describe("생성 때만 반영. 기본 none"),
+    usedIn: z.array(z.string()).optional().describe("이미 쓰인 데모 슬러그"),
+    ...caseAutoFields,
+    title: z.string().describe("앱 이름"),
+  },
+  async (args) => {
+    const r = await erp.addCase(args);
+    const c = r.case || r;
+    return { content: [{ type: "text", text: `${r.created ? "등록됨" : "갱신됨"}: [${c.type || "?"}] ${c.title} | key:${c.caseKey} · id:${c.id}${c.project?.code ? ` · 교육 ${c.project.code}` : ""}\n첨부 업로드는 external POST /cases/${c.id}/assets (multipart file+kind). 화면: https://b2b-sales-three.vercel.app/cases/${c.id}` }] };
+  }
+);
+
+server.tool(
+  "update_case",
+  "사례 카드의 자동 채움 칸 수정 (제목·유형·직무·태그·입력/출력·전후·화면 순서·배포 URL·근거점수·분류 근거·교육 연결). **본인이 올린 사례만** — 개인 API 키의 주인과 카드 작성자가 같아야 함(403 이면 그 이유가 옴). 동의·품질·메모와 숨김은 ERP 화면 /cases 에서만.",
+  { key: z.string().describe("case_key 또는 uuid"), ...caseAutoFields },
+  async ({ key, ...data }) => {
+    const c = await erp.updateCase(key, data);
+    return { content: [{ type: "text", text: `수정됨: [${c.type || "?"}] ${c.title} | key:${c.caseKey}${c.project?.code ? ` · 교육 ${c.project.code}` : ""}` }] };
+  }
+);
+
+server.tool(
+  "add_case_usage",
+  "\"이 사례를 어느 고객 데모(슬러그)에 청사진으로 썼다\" 기록. 데모 배포 직후 pick 마다 1번씩. 같은 슬러그가 이미 있으면 그대로(멱등). 다음 매칭에서 그 고객사엔 −2 점.",
+  {
+    key: z.string().describe("case_key 또는 uuid"),
+    slug: z.string().describe("데모 슬러그 (예: iljin, cenmedia)"),
+    projectCode: z.string().optional().describe("고객 건 ERP 프로젝트 코드 (있으면)"),
+    usedAt: z.string().optional().describe("ISO 날짜. 기본 지금"),
+    actorName: z.string().optional(),
+  },
+  async ({ key, ...data }) => {
+    const r = await erp.addCaseUsage(key, data);
+    return { content: [{ type: "text", text: `${r.created ? "기록됨" : "이미 있음"}: ${key} → ${r.usage.slug} (${String(r.usage.usedAt || "").slice(0, 10)})` }] };
+  }
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
